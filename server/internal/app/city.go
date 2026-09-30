@@ -1,0 +1,373 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"kanban-game/server/internal/game"
+)
+
+func (s *Server) gameConfig(w http.ResponseWriter, r *http.Request) {
+	st, err := loadSettings(r.Context(), s.db)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	defs := []game.BuildingDef{}
+	for _, k := range []string{"townhall", "barracks", "storage", "wall", "tower"} {
+		defs = append(defs, game.Buildings[k])
+	}
+	troops := []game.TroopDef{}
+	for _, k := range game.TroopOrder {
+		troops = append(troops, game.Troops[k])
+	}
+	respond(w, 200, map[string]any{
+		"grid": game.GridSize, "builders": game.MaxBuilders, "base_gold_cap": game.BaseGoldCap, "base_energy_cap": game.BaseEnergyCap,
+		"buildings": defs, "troops": troops, "settings": st, "points_scale": []int{1, 2, 3, 5, 8},
+	})
+}
+
+// armyOf returns ready troops and the housing of troops still in training.
+func armyOf(ctx context.Context, q dbtx, userID string) (map[string]int, int, error) {
+	troops := map[string]int{}
+	for _, k := range game.TroopOrder {
+		troops[k] = 0
+	}
+	rows, err := q.Query(ctx, `SELECT type,count FROM troops WHERE user_id=$1`, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var k string
+		var n int
+		if err = rows.Scan(&k, &n); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		troops[k] = n
+	}
+	rows.Close()
+	queued := map[string]int{}
+	rows, err = q.Query(ctx, `SELECT type,SUM(count)::int FROM training_queue WHERE user_id=$1 GROUP BY type`, userID)
+	if err != nil {
+		return nil, 0, err
+	}
+	for rows.Next() {
+		var k string
+		var n int
+		if err = rows.Scan(&k, &n); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		queued[k] = n
+	}
+	rows.Close()
+	return troops, game.Housing(queued), rows.Err()
+}
+
+type cityBuilding struct {
+	game.Building
+	Name      string          `json:"name"`
+	Spec      game.LevelSpec  `json:"spec"`
+	Next      *game.LevelSpec `json:"next"`
+	StartedAt *time.Time      `json:"started_at"`
+	MaxLevel  int             `json:"max_level"`
+}
+
+func cityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error) {
+	c, err := loadCity(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	st, err := loadSettings(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	out := []cityBuilding{}
+	for _, b := range c.Buildings {
+		def := game.Buildings[b.Type]
+		spec, _ := def.Spec(b.Level)
+		cb := cityBuilding{Building: b, Name: def.Name, Spec: spec, MaxLevel: def.MaxLevel()}
+		if n, ok := def.Spec(b.Level + 1); ok {
+			cb.Next = &n
+		}
+		if b.Busy() && b.TargetLevel != nil {
+			if target, ok := def.Spec(*b.TargetLevel); ok {
+				started := b.BusyUntil.Add(-game.BuildDuration(st, target))
+				cb.StartedAt = &started
+			}
+		}
+		out = append(out, cb)
+	}
+	th := c.TownHall()
+	limits := map[string]map[string]int{}
+	for k, def := range game.Buildings {
+		limits[k] = map[string]int{"built": c.Count(k), "allowed": def.Allowed(th)}
+	}
+	return map[string]any{"buildings": out, "limits": limits, "townhall": th}, nil
+}
+
+func (s *Server) city(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	if err := s.settleNow(r.Context(), a.ID); err != nil {
+		failErr(w, err)
+		return
+	}
+	c, err := cityDTO(r.Context(), s.db, a.ID)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	p, err := playerState(r.Context(), s.db, a.ID)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	c["player"] = p
+	c["server_time"] = time.Now()
+	respond(w, 200, c)
+}
+
+// gameTx starts a game action: settle timers and lock the player row so balance checks and spending are atomic.
+func gameTx(ctx context.Context, tx pgx.Tx, a actor) (balance, game.City, game.Settings, error) {
+	if a.TeamID == "" {
+		return balance{}, game.City{}, game.Settings{}, refuse(403, "not_a_player", "Игра доступна участникам команд.")
+	}
+	if err := settle(ctx, tx, a.ID); err != nil {
+		return balance{}, game.City{}, game.Settings{}, err
+	}
+	if err := lockPlayers(ctx, tx, a.ID); err != nil {
+		return balance{}, game.City{}, game.Settings{}, err
+	}
+	b, err := loadBalance(ctx, tx, a.ID)
+	if err != nil {
+		return b, game.City{}, game.Settings{}, err
+	}
+	c, err := loadCity(ctx, tx, a.ID)
+	if err != nil {
+		return b, c, game.Settings{}, err
+	}
+	st, err := loadSettings(ctx, tx)
+	return b, c, st, err
+}
+
+func asAPI(r *game.Refusal) error {
+	status := 409
+	if r.Code == "insufficient_gold" || r.Code == "insufficient_energy" {
+		status = 402
+	}
+	return refuse(status, r.Code, r.Message)
+}
+
+func debtRefusal(b balance) error {
+	if b.Gold < 0 || b.Energy < 0 {
+		return refuse(402, "debt", "Баланс отрицательный после отмены награды. Тратить ресурсы можно после погашения долга следующими наградами.")
+	}
+	return nil
+}
+
+func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			Type string `json:"type"`
+			X    int    `json:"x"`
+			Y    int    `json:"y"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		spec, rf := game.CheckPlace(c, in.Type, in.X, in.Y, b.Gold)
+		if rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		dur := game.BuildDuration(st, spec)
+		var id string
+		if err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,0,1,now()+$3*interval '1 millisecond',$4,$5) RETURNING id::text`,
+			a.ID, in.Type, dur.Milliseconds(), in.X, in.Y).Scan(&id); err != nil {
+			return 0, nil, err
+		}
+		name := game.Buildings[in.Type].Name
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "build", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: name + ": постройка"}); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "building.started", "building", id, fmt.Sprintf("%s: строится (%d золота)", name, spec.Cost)); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 201, out, err
+	})
+}
+
+func (s *Server) upgradeBuilding(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		var target *game.Building
+		for i := range c.Buildings {
+			if c.Buildings[i].ID == id {
+				target = &c.Buildings[i]
+			}
+		}
+		if target == nil {
+			return 0, nil, refuse(404, "not_found", "Здание не найдено.")
+		}
+		level, _, _ := game.Level(st, b.XP)
+		spec, rf := game.CheckUpgrade(c, *target, b.Gold, level)
+		if rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		dur := game.BuildDuration(st, spec)
+		if _, err = tx.Exec(ctx, `UPDATE buildings SET target_level=$2, busy_until=now()+$3*interval '1 millisecond' WHERE id=$1`, id, spec.Level, dur.Milliseconds()); err != nil {
+			return 0, nil, err
+		}
+		name := game.Buildings[target.Type].Name
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "upgrade", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)}); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "building.upgrade", "building", id, fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 200, out, err
+	})
+}
+
+func armyDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error) {
+	troops, _, err := armyOf(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.Query(ctx, `SELECT id::text,type,count,started_at,finish_at FROM training_queue WHERE user_id=$1 ORDER BY finish_at`, userID)
+	if err != nil {
+		return nil, err
+	}
+	queue, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
+		var id, kind string
+		var count int
+		var started, finish time.Time
+		err := row.Scan(&id, &kind, &count, &started, &finish)
+		return map[string]any{"id": id, "type": kind, "count": count, "started_at": started, "finish_at": finish}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	p, err := playerState(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"troops": troops, "queue": queue, "player": p, "server_time": time.Now()}, nil
+}
+
+func (s *Server) army(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	if err := s.settleNow(r.Context(), a.ID); err != nil {
+		failErr(w, err)
+		return
+	}
+	out, err := armyDTO(r.Context(), s.db, a.ID)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	respond(w, 200, out)
+}
+
+// train queues troops: energy is paid now, units arrive one batch after another; housing counts the queue too.
+func (s *Server) train(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			Type  string `json:"type"`
+			Count int    `json:"count"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		def, ok := game.Troops[in.Type]
+		if !ok || in.Count < 1 || in.Count > 50 {
+			return 0, nil, refuse(422, "invalid_fields", "Выберите тип войск и количество от 1 до 50.")
+		}
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		capacity := c.ArmyCapacity()
+		if capacity == 0 {
+			return 0, nil, refuse(409, "no_barracks", "Постройте казарму, чтобы готовить войска.")
+		}
+		troops, queued, err := armyOf(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		if game.Housing(troops)+queued+def.Housing*in.Count > capacity {
+			return 0, nil, refuse(409, "army_full", fmt.Sprintf("Не хватает места в казармах: занято %d из %d.", game.Housing(troops)+queued, capacity))
+		}
+		cost := def.Cost * int64(in.Count)
+		if b.Energy < cost {
+			return 0, nil, refuse(402, "insufficient_energy", fmt.Sprintf("Недостаточно энергии: нужно %d, есть %d.", cost, b.Energy))
+		}
+		dur := game.TrainDuration(st, def, in.Count)
+		if _, err = tx.Exec(ctx, `INSERT INTO training_queue(user_id,type,count,started_at,finish_at)
+ SELECT $1,$2,$3,s,s+$4*interval '1 millisecond' FROM (SELECT GREATEST(now(), COALESCE((SELECT MAX(finish_at) FROM training_queue WHERE user_id=$1), now())) s) x`,
+			a.ID, in.Type, in.Count, dur.Milliseconds()); err != nil {
+			return 0, nil, err
+		}
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "train", Energy: -cost, ActorID: a.ID, Note: fmt.Sprintf("Обучение: %s × %d", def.Name, in.Count)}); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "army.training", "troops", in.Type, fmt.Sprintf("Начато обучение: %s × %d", def.Name, in.Count)); err != nil {
+			return 0, nil, err
+		}
+		out, err := armyDTO(ctx, tx, a.ID)
+		return 201, out, err
+	})
+}

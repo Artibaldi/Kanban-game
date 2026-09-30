@@ -1,0 +1,19 @@
+name: kanban_game_local
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: kanban
+      POSTGRES_PASSWORD: kanban-local-only
+      POSTGRES_DB: kanban
+    ports:
+      - "127.0.0.1:15433:5432"
+    volumes:
+      - kanban_pg18:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanban -d kanban"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  kanban_pg18:
