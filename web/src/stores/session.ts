@@ -28,6 +28,13 @@ export const useSession = defineStore('session', {
       this.me = await api.patch<Me>('/me/settings', { game_mode: on })
       this.applyMode()
     },
+    async setAcceptFriendly(on: boolean) {
+      this.me = await api.patch<Me>('/me/settings', { accept_friendly: on })
+    },
+    async ackGameRules() {
+      await api.post('/me/game-rules-ack', {})
+      if (this.me) this.me = { ...this.me, game_rules_ack: true }
+    },
     applyMode() {
       document.body.classList.toggle('work-mode', !this.gameOn)
     },

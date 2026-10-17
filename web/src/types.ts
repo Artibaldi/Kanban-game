@@ -5,6 +5,7 @@ export type Priority = 'P1' | 'P2' | 'P3' | 'P4'
 export interface Me {
   id: string; display_name: string; login: string; role: Role
   team_id: string | null; team_name: string; game_mode: boolean; plays: boolean; demo_auth: boolean
+  accept_friendly: boolean; game_rules_ack: boolean
 }
 
 export interface Reward { gold: number; energy: number; xp: number }
@@ -60,6 +61,9 @@ export interface Settings {
   shield_minutes: number; rematch_minutes: number; random_spread: number
   battle_gold_base: number; battle_gold_per_percent: number; battle_xp_per_star: number
   time_scale: number; battle_scope: 'team' | 'all'; start_gold: number; start_energy: number
+  overdue_damage_per_point: number; fortress_floor: number; repair_by_crowns: number[]; crown_thresholds: number[]
+  wave_chest_gold: number[]; wave_chest_energy: number[]; max_defense_bonus: number; defense_score_full: number
+  friendly_xp: number; friendly_per_day: number
 }
 
 export interface GameConfig {
@@ -87,8 +91,27 @@ export interface Round {
   wall_hp: number; tower_hp: number; townhall_hp: number; other_hp: number; events: string[]
 }
 export interface Battle {
-  id: string; attacker_id: string; defender_id: string; attacker: string; defender: string; seed: number
+  id: string; kind: 'raid' | 'friendly'; attacker_id: string; defender_id: string; attacker: string; defender: string; seed: number
   army: Record<string, number>; losses: Record<string, number>; defense: Defense; rounds: Round[]
   destruction: number; stars: number; gold: number; xp: number; attacker_trophies: number; defender_trophies: number; created_at: string
 }
 export interface FeedItem { id: number; actor: string; action: string; target_type: string; target_id: string | null; summary: string; created_at: string }
+
+export interface Fortress { hp: number; level: number; siege: boolean }
+export interface WaveNow {
+  id: string; starts_at: string; ends_at: string; days_left: number
+  planned: number; closed: number; overdue: number; overdue_p1: number; crowns_now: number
+}
+export interface Enemy {
+  task_id: string; number: string; title: string; points: number; priority: Priority; due_date: string | null
+  kind: 'goblin' | 'knight' | 'giant' | 'dragon'; row: number; at_gates: boolean; overdue: boolean
+}
+export interface WaveSummary {
+  id: string; starts_at?: string; ends_at: string; planned?: number; closed?: number; overdue?: number
+  crowns: number; summary: string; settled_at?: string
+}
+export interface FortressState { fortress: Fortress; wave: WaveNow; enemies: Enemy[]; fog: number; last_wave: WaveSummary | null }
+export interface MyProgress { weeks: string[]; weekly: number[]; this_week: number; best_week: number; total: number; explanation: string }
+export interface TeamProgress { weeks: string[]; team_weekly: number[]; overdue_now: number; waves: WaveSummary[] }
+export interface Duelist { user_id: string; display_name: string; townhall: number; available: boolean; reason: string; defense: Defense }
+export interface TeamSettings { id: string; name: string; work_days: number[]; wave_weeks: number }
