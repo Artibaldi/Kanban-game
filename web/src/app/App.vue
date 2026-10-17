@@ -19,14 +19,14 @@ const all: NavItem[] = [
   { to: '/', label: 'Главная', icon: 'home' },
   { to: '/board', label: 'Доска', icon: 'board' },
   { to: '/review', label: 'Проверка', icon: 'review', lead: true },
+  { to: '/fortress', label: 'Крепость', icon: 'flag', game: true },
   { to: '/city', label: 'Город', icon: 'castle', game: true },
   { to: '/army', label: 'Казарма', icon: 'shield', game: true },
-  { to: '/opponents', label: 'Бои', icon: 'swords', game: true },
   { to: '/ratings', label: 'Рейтинги', icon: 'trophy' },
   { to: '/admin', label: 'Админ', icon: 'users', admin: true },
 ]
 const nav = computed(() => all.filter(i => (!i.game || session.gameOn) && (!i.lead || session.isLead) && (!i.admin || session.isAdmin)))
-const mobileNav = computed(() => nav.value.filter(i => i.to !== '/army' && i.to !== '/admin').slice(0, 5))
+const mobileNav = computed(() => nav.value.filter(i => i.to !== '/army' && i.to !== '/admin' && i.to !== '/review').slice(0, 5))
 const active = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
 
 let timer = 0

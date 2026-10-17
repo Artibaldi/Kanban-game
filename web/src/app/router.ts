@@ -10,6 +10,7 @@ export const router = createRouter({
     { path: '/review', component: () => import('../pages/ReviewPage.vue'), meta: { title: 'Проверка', lead: true } },
     { path: '/city', component: () => import('../pages/CityPage.vue'), meta: { title: 'Город', game: true } },
     { path: '/army', component: () => import('../pages/ArmyPage.vue'), meta: { title: 'Казарма', game: true } },
+    { path: '/fortress', component: () => import('../pages/FortressPage.vue'), meta: { title: 'Крепость', game: true } },
     { path: '/opponents', component: () => import('../pages/OpponentsPage.vue'), meta: { title: 'Соперники', game: true } },
     { path: '/battles/:id', component: () => import('../pages/BattlePage.vue'), meta: { title: 'Бой', game: true } },
     { path: '/ratings', component: () => import('../pages/RatingsPage.vue'), meta: { title: 'Рейтинги' } },
