@@ -122,6 +122,9 @@ var seedTroops = map[string]map[string]int{
 	"pavel":  {"guard": 10, "raider": 6, "ram": 4},
 }
 
+// seedDuelists accept friendly duels from teammates in the demo.
+var seedDuelists = map[string]bool{"alexey": true, "maria": true, "anna": true}
+
 // Seed fills an empty database. It is a no-op once any user exists.
 func (s *Server) Seed(ctx context.Context) (bool, error) {
 	var n int
@@ -155,7 +158,8 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		if u.team != "" {
 			team = teams[u.team]
 		}
-		if err := tx.QueryRow(ctx, `INSERT INTO users(login,display_name,role,team_id,title) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, u.login, u.name, u.role, team, u.title).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO users(login,display_name,role,team_id,title,accept_friendly) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`,
+			u.login, u.name, u.role, team, u.title, seedDuelists[u.login]).Scan(&id); err != nil {
 			return err
 		}
 		a := actor{ID: id, Name: u.name, Login: u.login, Role: u.role}

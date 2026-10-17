@@ -9,24 +9,16 @@ import (
 
 // Settings are the coefficients an administrator may change. Stored as JSON under settings.key='economy'.
 type Settings struct {
-	GoldPerPoint         float64            `json:"gold_per_point"`
-	EnergyPerPoint       float64            `json:"energy_per_point"`
-	XPPerPoint           float64            `json:"xp_per_point"`
-	PriorityMult         map[string]float64 `json:"priority_mult"`
-	OnTimeBonus          float64            `json:"on_time_bonus"`
-	LevelXPBase          float64            `json:"level_xp_base"`
-	LevelXPExp           float64            `json:"level_xp_exp"`
-	AttackEnergy         int64              `json:"attack_energy"`
-	ShieldMinutes        int                `json:"shield_minutes"`
-	RematchMinutes       int                `json:"rematch_minutes"`
-	RandomSpread         float64            `json:"random_spread"`
-	BattleGoldBase       float64            `json:"battle_gold_base"`
-	BattleGoldPerPercent float64            `json:"battle_gold_per_percent"`
-	BattleXPPerStar      float64            `json:"battle_xp_per_star"`
+	GoldPerPoint   float64            `json:"gold_per_point"`
+	EnergyPerPoint float64            `json:"energy_per_point"`
+	XPPerPoint     float64            `json:"xp_per_point"`
+	PriorityMult   map[string]float64 `json:"priority_mult"`
+	OnTimeBonus    float64            `json:"on_time_bonus"`
+	LevelXPBase    float64            `json:"level_xp_base"`
+	LevelXPExp     float64            `json:"level_xp_exp"`
+	RandomSpread   float64            `json:"random_spread"`
 	// TimeScale multiplies every build and training time; 1 = short demo timers.
 	TimeScale float64 `json:"time_scale"`
-	// BattleScope: "team" — opponents only from the attacker's team; "all" — from every team.
-	BattleScope string `json:"battle_scope"`
 	// StartGold and StartEnergy are granted once when a player joins.
 	StartGold   int64 `json:"start_gold"`
 	StartEnergy int64 `json:"start_energy"`
@@ -47,24 +39,17 @@ type Settings struct {
 
 func DefaultSettings() Settings {
 	return Settings{
-		GoldPerPoint:         40,
-		EnergyPerPoint:       10,
-		XPPerPoint:           25,
-		PriorityMult:         map[string]float64{"P1": 1.2, "P2": 1.1, "P3": 1.0, "P4": 0.9},
-		OnTimeBonus:          0.10,
-		LevelXPBase:          100,
-		LevelXPExp:           1.5,
-		AttackEnergy:         20,
-		ShieldMinutes:        10,
-		RematchMinutes:       30,
-		RandomSpread:         0.10,
-		BattleGoldBase:       50,
-		BattleGoldPerPercent: 3,
-		BattleXPPerStar:      15,
-		TimeScale:            1,
-		BattleScope:          "team",
-		StartGold:            300,
-		StartEnergy:          60,
+		GoldPerPoint:   40,
+		EnergyPerPoint: 10,
+		XPPerPoint:     25,
+		PriorityMult:   map[string]float64{"P1": 1.2, "P2": 1.1, "P3": 1.0, "P4": 0.9},
+		OnTimeBonus:    0.10,
+		LevelXPBase:    100,
+		LevelXPExp:     1.5,
+		RandomSpread:   0.10,
+		TimeScale:      1,
+		StartGold:      300,
+		StartEnergy:    60,
 
 		OverdueDamagePerPoint: 2,
 		FortressFloor:         10,
@@ -92,27 +77,12 @@ func (s Settings) Normalize() Settings {
 	pos(&s.XPPerPoint, d.XPPerPoint)
 	pos(&s.LevelXPBase, d.LevelXPBase)
 	pos(&s.LevelXPExp, d.LevelXPExp)
-	pos(&s.BattleGoldBase, d.BattleGoldBase)
-	pos(&s.BattleGoldPerPercent, d.BattleGoldPerPercent)
-	pos(&s.BattleXPPerStar, d.BattleXPPerStar)
 	pos(&s.TimeScale, d.TimeScale)
 	if s.OnTimeBonus < 0 || s.OnTimeBonus > 1 {
 		s.OnTimeBonus = d.OnTimeBonus
 	}
 	if s.RandomSpread < 0 || s.RandomSpread > 0.3 {
 		s.RandomSpread = d.RandomSpread
-	}
-	if s.AttackEnergy < 0 {
-		s.AttackEnergy = d.AttackEnergy
-	}
-	if s.ShieldMinutes < 0 {
-		s.ShieldMinutes = d.ShieldMinutes
-	}
-	if s.RematchMinutes < 0 {
-		s.RematchMinutes = d.RematchMinutes
-	}
-	if s.BattleScope != "team" && s.BattleScope != "all" {
-		s.BattleScope = d.BattleScope
 	}
 	if s.StartGold < 0 {
 		s.StartGold = d.StartGold

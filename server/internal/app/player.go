@@ -32,13 +32,9 @@ func playerState(ctx context.Context, q dbtx, userID string) (map[string]any, er
 		return nil, err
 	}
 	housing := game.Housing(troops)
-	var shield *time.Time
-	if b.ShieldUntil != nil && b.ShieldUntil.After(time.Now()) {
-		shield = b.ShieldUntil
-	}
 	return map[string]any{
 		"gold": b.Gold, "energy": b.Energy, "xp": b.XP, "gold_cap": capG, "energy_cap": capE,
-		"level": level, "level_xp": into, "level_need": need, "trophies": b.Trophies, "shield_until": shield,
+		"level": level, "level_xp": into, "level_need": need, "trophies": b.Trophies,
 		"debt": b.Gold < 0 || b.Energy < 0, "townhall": c.TownHall(), "builders_busy": c.BuildersBusy(), "builders": game.MaxBuilders,
 		"army_capacity": c.ArmyCapacity(), "army_housing": housing, "army_queued": queued,
 	}, nil
@@ -247,44 +243,6 @@ func startOfWeek(t time.Time) time.Time {
 		wd = 7
 	}
 	return d.AddDate(0, 0, -(wd - 1))
-}
-
-// battleRating: trophies, wins and attacks among the players the actor may fight.
-func (s *Server) battleRating(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.authed(w, r)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
-	st, err := loadSettings(ctx, s.db)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	all := st.BattleScope == "all" || a.admin()
-	rows, err := s.db.Query(ctx, `SELECT u.id::text,u.display_name,t.name,p.trophies,
- (SELECT count(*) FROM battles b WHERE b.attacker_id=u.id AND b.stars>0),
- (SELECT count(*) FROM battles b WHERE b.attacker_id=u.id),
- (SELECT count(*) FROM battles b WHERE b.defender_id=u.id AND b.stars=0),
- COALESCE((SELECT level FROM buildings WHERE user_id=u.id AND type='townhall'),0)
- FROM players p JOIN users u ON u.id=p.user_id JOIN teams t ON t.id=u.team_id
- WHERE u.active AND ($1 OR u.team_id::text=$2) ORDER BY p.trophies DESC, u.display_name`, all, a.TeamID)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
-		var id, name, team string
-		var trophies, th int
-		var wins, attacks, defenses int64
-		err := row.Scan(&id, &name, &team, &trophies, &wins, &attacks, &defenses, &th)
-		return map[string]any{"user_id": id, "display_name": name, "team": team, "trophies": trophies, "wins": wins, "attacks": attacks, "defenses_held": defenses, "townhall": th}, err
-	})
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	respond(w, 200, map[string]any{"items": out, "scope": map[bool]string{true: "all", false: "team"}[all]})
 }
 
 // burndown: remaining backlog points per day, with scope added/re-estimated/reopened shown apart from completion.

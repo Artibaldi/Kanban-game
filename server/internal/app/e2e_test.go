@@ -274,30 +274,49 @@ func TestEndToEnd(t *testing.T) {
 	}
 	dmitry.refused("insufficient_gold", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 0, "y": 0})
 
-	// 5. Army and battle: train, attack a rival of close level; the rival is shielded afterwards.
+	// 5. Army and a friendly duel: no energy, no losses, no trophies; a daily limit; only colleagues who accept duels.
 	alexey.must(201, "POST", "/army/train", map[string]any{"type": "guard", "count": 2}, "")
 	waitFor(t, "training", func() bool {
 		a := alexey.must(200, "GET", "/army", nil, "").Body
 		return num(a["troops"].(map[string]any)["guard"]) == 12
 	})
 	var maria string
-	for _, o := range items(alexey.must(200, "GET", "/opponents", nil, "")) {
+	for _, o := range items(alexey.must(200, "GET", "/duels", nil, "")) {
 		if o["display_name"] == "Мария Иванова" {
 			maria = o["user_id"].(string)
 		}
 	}
-	energyBefore := num(alexey.must(200, "GET", "/player", nil, "").Body["energy"])
+	if maria == "" {
+		t.Fatal("maria accepts friendly duels in the seed")
+	}
+	alexey.must(200, "GET", "/duels/"+maria+"/city", nil, "")
 	workBefore := weekPoints(t, irina, "алексей")
-	battle := alexey.must(201, "POST", "/battles", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 8, "raider": 6, "ram": 3}}, "")
-	if len(battle.Body["rounds"].([]any)) == 0 {
-		t.Fatalf("battle log: %s", battle.Raw)
+	var duelWorkBefore int
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0) FROM work_points_events WHERE user_id=(SELECT id FROM users WHERE login='alexey')`).Scan(&duelWorkBefore)
+	pBefore := alexey.must(200, "GET", "/player", nil, "").Body
+	armyBefore := alexey.must(200, "GET", "/army", nil, "").Body["troops"].(map[string]any)
+	duel := alexey.must(201, "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 8, "raider": 6, "ram": 3}}, "")
+	if duel.Body["kind"] != "friendly" || len(duel.Body["rounds"].([]any)) == 0 {
+		t.Fatalf("duel: %s", duel.Raw)
 	}
-	if e := num(alexey.must(200, "GET", "/player", nil, "").Body["energy"]); energyBefore-e != 20 {
-		t.Fatalf("attack costs 20 energy: %v → %v", energyBefore, e)
+	pAfter := alexey.must(200, "GET", "/player", nil, "").Body
+	if num(pAfter["energy"]) != num(pBefore["energy"]) || num(pAfter["trophies"]) != num(pBefore["trophies"]) || num(pAfter["gold"]) != num(pBefore["gold"]) {
+		t.Fatalf("a friendly duel is free: %v → %v", pBefore, pAfter)
 	}
-	alexey.refused("shielded", "POST", "/battles", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}})
-	if got := weekPoints(t, irina, "алексей"); got != workBefore {
-		t.Fatalf("battles must not change the work rating: %v → %v", workBefore, got)
+	if got := alexey.must(200, "GET", "/army", nil, "").Body["troops"].(map[string]any); num(got["guard"]) != num(armyBefore["guard"]) || num(got["ram"]) != num(armyBefore["ram"]) {
+		t.Fatalf("no losses: %v → %v", armyBefore, got)
+	}
+	for i := 0; i < 2; i++ {
+		alexey.must(201, "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}}, "")
+	}
+	alexey.refused("friendly_limit", "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}})
+	dmitryID := dmitry.must(200, "GET", "/me", nil, "").Body["id"].(string)
+	alexey.refused("not_found", "POST", "/battles/friendly", map[string]any{"defender_id": dmitryID, "army": map[string]int{"guard": 1}}) // does not accept duels
+	alexey.must(404, "GET", "/opponents", nil, "")
+	var duelWorkAfter int
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0) FROM work_points_events WHERE user_id=(SELECT id FROM users WHERE login='alexey')`).Scan(&duelWorkAfter)
+	if duelWorkAfter != duelWorkBefore {
+		t.Fatalf("duels must not change the work rating: %v → %v", duelWorkBefore, duelWorkAfter)
 	}
 	var mariaBuildings int
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM buildings WHERE user_id=$1`, maria).Scan(&mariaBuildings)

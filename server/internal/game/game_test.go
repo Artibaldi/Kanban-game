@@ -135,15 +135,3 @@ func TestFightRamsBeatWalls(t *testing.T) {
 		t.Fatalf("rams should break fortified cities better: %d vs %d", withRams.Destruction, noRams.Destruction)
 	}
 }
-
-func TestRewardForLossAndWin(t *testing.T) {
-	s := DefaultSettings()
-	lose := RewardFor(s, Outcome{Destruction: 0, Stars: 0}, 2)
-	if lose.Gold != 0 || lose.AttackerTrophies != -5 || lose.DefenderTrophies != 5 {
-		t.Fatalf("loss: %+v", lose)
-	}
-	win := RewardFor(s, Outcome{Destruction: 60, Stars: 1}, 1)
-	if win.Gold != 230 || win.XP != 20 || win.AttackerTrophies != 8 {
-		t.Fatalf("win: %+v", win)
-	}
-}
