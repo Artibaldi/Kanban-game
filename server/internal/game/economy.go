@@ -30,6 +30,19 @@ type Settings struct {
 	// StartGold and StartEnergy are granted once when a player joins.
 	StartGold   int64 `json:"start_gold"`
 	StartEnergy int64 `json:"start_energy"`
+
+	// Co-op: fortress damage in percent per overdue point a day, its floor, repair and the team chest by crowns.
+	OverdueDamagePerPoint float64    `json:"overdue_damage_per_point"`
+	FortressFloor         int        `json:"fortress_floor"`
+	RepairByCrowns        [4]int     `json:"repair_by_crowns"`
+	CrownThresholds       [2]float64 `json:"crown_thresholds"`
+	WaveChestGold         [4]int64   `json:"wave_chest_gold"`
+	WaveChestEnergy       [4]int64   `json:"wave_chest_energy"`
+	// MaxDefenseBonus is reached when the members' average defense score is DefenseScoreFull.
+	MaxDefenseBonus  float64 `json:"max_defense_bonus"`
+	DefenseScoreFull int64   `json:"defense_score_full"`
+	FriendlyXP       int64   `json:"friendly_xp"`
+	FriendlyPerDay   int     `json:"friendly_per_day"`
 }
 
 func DefaultSettings() Settings {
@@ -52,6 +65,17 @@ func DefaultSettings() Settings {
 		BattleScope:          "team",
 		StartGold:            300,
 		StartEnergy:          60,
+
+		OverdueDamagePerPoint: 2,
+		FortressFloor:         10,
+		RepairByCrowns:        [4]int{0, 10, 25, 100},
+		CrownThresholds:       [2]float64{0.5, 0.8},
+		WaveChestGold:         [4]int64{0, 60, 140, 250},
+		WaveChestEnergy:       [4]int64{0, 15, 35, 60},
+		MaxDefenseBonus:       0.20,
+		DefenseScoreFull:      4000,
+		FriendlyXP:            5,
+		FriendlyPerDay:        3,
 	}
 }
 
@@ -95,6 +119,36 @@ func (s Settings) Normalize() Settings {
 	}
 	if s.StartEnergy < 0 {
 		s.StartEnergy = d.StartEnergy
+	}
+	if !(s.OverdueDamagePerPoint > 0) || s.OverdueDamagePerPoint > 100 {
+		s.OverdueDamagePerPoint = d.OverdueDamagePerPoint
+	}
+	if s.FortressFloor <= 0 || s.FortressFloor > 100 {
+		s.FortressFloor = d.FortressFloor
+	}
+	if s.RepairByCrowns == [4]int{} {
+		s.RepairByCrowns = d.RepairByCrowns
+	}
+	if th := s.CrownThresholds; !(th[0] > 0 && th[0] < th[1] && th[1] <= 1) {
+		s.CrownThresholds = d.CrownThresholds
+	}
+	if s.WaveChestGold == [4]int64{} {
+		s.WaveChestGold = d.WaveChestGold
+	}
+	if s.WaveChestEnergy == [4]int64{} {
+		s.WaveChestEnergy = d.WaveChestEnergy
+	}
+	if s.MaxDefenseBonus < 0 || s.MaxDefenseBonus > 1 {
+		s.MaxDefenseBonus = d.MaxDefenseBonus
+	}
+	if s.DefenseScoreFull <= 0 {
+		s.DefenseScoreFull = d.DefenseScoreFull
+	}
+	if s.FriendlyXP <= 0 {
+		s.FriendlyXP = d.FriendlyXP
+	}
+	if s.FriendlyPerDay <= 0 {
+		s.FriendlyPerDay = d.FriendlyPerDay
 	}
 	if s.PriorityMult == nil {
 		s.PriorityMult = map[string]float64{}
