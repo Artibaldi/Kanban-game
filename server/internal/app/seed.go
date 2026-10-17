@@ -276,6 +276,12 @@ func seed(ctx context.Context, tx pgx.Tx) error {
  WHERE e.action='task.approved' AND l.task_id::text=e.target_id AND l.kind='task_reward'`); err != nil {
 		return err
 	}
+	// The current wave of each team, with the enemies on the board as its plan.
+	for _, id := range teams {
+		if _, err := ensureWave(ctx, tx, id, now); err != nil {
+			return err
+		}
+	}
 	_, err := tx.Exec(ctx, `INSERT INTO audit_events(action,target_type,summary) VALUES('seed','system','Созданы демонстрационные данные')`)
 	return err
 }
