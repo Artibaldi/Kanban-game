@@ -93,6 +93,8 @@ func (s *Server) Routes() http.Handler {
 		r.Patch("/admin/users/{id}", s.adminPatchUser)
 		r.Get("/admin/settings", s.adminSettings)
 		r.Put("/admin/settings", s.adminPutSettings)
+		r.Get("/admin/teams", s.adminTeams)
+		r.Patch("/admin/teams/{id}", s.adminPatchTeam)
 	})
 	if s.static != "" {
 		r.Get("/*", s.spa)

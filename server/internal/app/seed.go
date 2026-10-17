@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"kanban-game/server/internal/game"
 )
 
 // Demo data for the local prototype: two teams, eight people, tasks in every column, six weeks of confirmed work
@@ -278,6 +280,19 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	// The feed shows historical events at the time they happened.
 	if _, err := tx.Exec(ctx, `UPDATE audit_events e SET created_at=l.created_at FROM ledger l
  WHERE e.action='task.approved' AND l.task_id::text=e.target_id AND l.kind='task_reward'`); err != nil {
+		return err
+	}
+	// Three past waves of «Платформа» (3, 1 and 2 crowns) and a slightly damaged fortress.
+	st := game.DefaultSettings()
+	for i, t := range []game.WaveTally{{Planned: 21, Closed: 21}, {Planned: 24, Closed: 13, Overdue: 2, OverdueP1: 1}, {Planned: 18, Closed: 15, Overdue: 1}} {
+		start, end := game.WaveWindow(now.AddDate(0, 0, -7*(3-i)), 1)
+		crowns := game.Crowns(st, t)
+		if _, err := tx.Exec(ctx, `INSERT INTO waves(team_id,starts_at,ends_at,planned_points,closed_points,overdue_count,overdue_p1_count,crowns,defense_bonus,summary,settled_at)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$3)`, teams["Платформа"], start, end, t.Planned, t.Closed, t.Overdue, t.OverdueP1, crowns, game.WaveSummary(t, crowns)); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE fortresses SET hp=85, level=3 WHERE team_id=$1`, teams["Платформа"]); err != nil {
 		return err
 	}
 	// The current wave of each team, with the enemies on the board as its plan.

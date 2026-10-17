@@ -24,12 +24,26 @@ const enemyFilter = `t.state IN ('ready','in_progress','review') AND t.points_ap
 // the wave takes the snapshot of the enemies at that moment, so the plan is never rebuilt from a later state.
 func ensureWave(ctx context.Context, tx pgx.Tx, teamID string, now time.Time) (waveRow, error) {
 	w := waveRow{TeamID: teamID}
+	// An open wave that has not ended stays current even if the team's wave length changed since it began.
+	err := tx.QueryRow(ctx, `SELECT id::text, starts_at, ends_at FROM waves WHERE team_id=$1 AND settled_at IS NULL AND starts_at<=$2 AND ends_at>$2
+ ORDER BY starts_at LIMIT 1`, teamID, now).Scan(&w.ID, &w.StartsAt, &w.EndsAt)
+	if err == nil || !errors.Is(err, pgx.ErrNoRows) {
+		return w, err
+	}
 	var weeks int
 	if err := tx.QueryRow(ctx, `SELECT wave_weeks FROM teams WHERE id=$1`, teamID).Scan(&weeks); err != nil {
 		return w, err
 	}
 	w.StartsAt, w.EndsAt = game.WaveWindow(now, weeks)
-	err := tx.QueryRow(ctx, `INSERT INTO waves(team_id,starts_at,ends_at) VALUES($1,$2,$3) ON CONFLICT (team_id,starts_at) DO NOTHING RETURNING id::text`,
+	// After a change of length the new window may begin inside the previous wave: start where that one ended.
+	var lastEnd *time.Time
+	if err = tx.QueryRow(ctx, `SELECT MAX(ends_at) FROM waves WHERE team_id=$1 AND ends_at<=$2`, teamID, now).Scan(&lastEnd); err != nil {
+		return w, err
+	}
+	if lastEnd != nil && lastEnd.After(w.StartsAt) {
+		w.StartsAt = *lastEnd
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO waves(team_id,starts_at,ends_at) VALUES($1,$2,$3) ON CONFLICT (team_id,starts_at) DO NOTHING RETURNING id::text`,
 		teamID, w.StartsAt, w.EndsAt).Scan(&w.ID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `SELECT id::text, ends_at FROM waves WHERE team_id=$1 AND starts_at=$2`, teamID, w.StartsAt).Scan(&w.ID, &w.EndsAt)

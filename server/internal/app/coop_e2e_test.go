@@ -32,7 +32,7 @@ func TestCoopSchema(t *testing.T) {
 // shiftCurrentWave moves the team's open wave one period into the past, as if a new week had started.
 func shiftCurrentWave(t *testing.T, pool *pgxpool.Pool, team string) {
 	t.Helper()
-	tag, err := pool.Exec(context.Background(), `UPDATE waves SET starts_at=starts_at-interval '7 days', ends_at=ends_at-interval '7 days'
+	tag, err := pool.Exec(context.Background(), `UPDATE waves SET starts_at=starts_at-interval '70 days', ends_at=ends_at-interval '70 days'
  WHERE team_id=(SELECT id FROM teams WHERE name=$1) AND settled_at IS NULL`, team)
 	if err != nil || tag.RowsAffected() == 0 {
 		t.Fatalf("shift wave: %v, rows %d", err, tag.RowsAffected())
@@ -296,5 +296,38 @@ func TestProgressHasNoPerPersonTable(t *testing.T) {
 	irina.must(200, "POST", "/me/game-rules-ack", map[string]any{}, "")
 	if irina.must(200, "GET", "/me", nil, "").Body["game_rules_ack"] != true {
 		t.Fatal("acknowledged")
+	}
+}
+
+func TestAdminTeamsAndSeed(t *testing.T) {
+	ts, pool, _ := testServer(t)
+	admin := login(t, ts, "admin")
+	teams := items(admin.must(200, "GET", "/admin/teams", nil, ""))
+	if len(teams) != 2 {
+		t.Fatalf("two demo teams: %v", teams)
+	}
+	id := teams[0]["id"].(string) // Мобайл
+	anna := login(t, ts, "anna")
+	waveBefore := anna.must(200, "GET", "/fortress", nil, "").Body["wave"].(map[string]any)["id"]
+	admin.refused("invalid_wave_weeks", "PATCH", "/admin/teams/"+id, map[string]any{"wave_weeks": 5})
+	admin.refused("invalid_work_days", "PATCH", "/admin/teams/"+id, map[string]any{"work_days": []int{}})
+	admin.refused("invalid_work_days", "PATCH", "/admin/teams/"+id, map[string]any{"work_days": []int{1, 1}})
+	admin.refused("invalid_work_days", "PATCH", "/admin/teams/"+id, map[string]any{"work_days": []int{8}})
+	got := admin.must(200, "PATCH", "/admin/teams/"+id, map[string]any{"wave_weeks": 2, "work_days": []int{1, 2, 3, 4}}, "").Body
+	if num(got["wave_weeks"]) != 2 || len(got["work_days"].([]any)) != 4 {
+		t.Fatalf("patched: %v", got)
+	}
+	if after := anna.must(200, "GET", "/fortress", nil, "").Body["wave"].(map[string]any)["id"]; after != waveBefore {
+		t.Fatalf("a new wave length applies from the next wave, not mid-wave: %v → %v", waveBefore, after)
+	}
+	alexey := login(t, ts, "alexey")
+	alexey.refused("forbidden", "PATCH", "/admin/teams/"+id, map[string]any{"wave_weeks": 1})
+	if n := len(items(alexey.must(200, "GET", "/waves", nil, ""))); n < 3 {
+		t.Fatalf("seeded past waves: %d", n)
+	}
+	var hp int
+	_ = pool.QueryRow(context.Background(), `SELECT hp FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp)
+	if hp != 85 {
+		t.Fatalf("seeded fortress: %d", hp)
 	}
 }
