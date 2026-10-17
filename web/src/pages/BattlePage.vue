@@ -26,7 +26,7 @@ onMounted(async () => {
   try {
     battle.value = await api.get<Battle>(`/battles/${route.params.id}`)
     const mine = battle.value.attacker_id === session.me?.id
-    city.value = await api.get<City>(mine ? `/opponents/${battle.value.defender_id}/city` : '/city').catch(() => null)
+    city.value = await api.get<City>(mine ? `/duels/${battle.value.defender_id}/city` : '/city').catch(() => null)
     if (session.gameOn && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) play()
     else step.value = battle.value.rounds.length
   } catch (e) { toasts.error(e) }
@@ -85,13 +85,13 @@ function roundText(r: Battle['rounds'][number]) {
 
 <template>
   <div class="page">
-    <RouterLink to="/opponents" class="back small"><Icon name="left" :size="14" />К соперникам</RouterLink>
+    <RouterLink to="/fortress/duels" class="back small"><Icon name="left" :size="14" />К дружеским боям</RouterLink>
     <div v-if="!b" class="muted">Загрузка боя…</div>
     <template v-else>
       <div class="page-head">
         <div>
           <p class="eyebrow">{{ dateTime(b.created_at) }}</p>
-          <h1>Бой: {{ b.attacker }} против {{ b.defender }}</h1>
+          <h1>{{ b.kind === 'friendly' ? 'Дружеский бой' : 'Набег (архив)' }}: {{ b.attacker }} и {{ b.defender }}</h1>
         </div>
         <div class="row">
           <button class="btn" :disabled="playing" @click="play"><Icon name="history" :size="16" />Повторить</button>
@@ -129,7 +129,11 @@ function roundText(r: Battle['rounds'][number]) {
               <Icon v-for="i in 3" :key="i" name="star" :size="30" :class="{ lit: i <= b.stars }" />
             </div>
             <p class="big num">{{ b.destruction }}% разрушений</p>
-            <dl class="rew small">
+            <dl v-if="b.kind === 'friendly'" class="rew small">
+              <div v-if="iAttacked"><dt>Опыт</dt><dd class="x">+{{ b.xp }}</dd></div>
+              <div><dt>Потери</dt><dd>нет: бой дружеский</dd></div>
+            </dl>
+            <dl v-else class="rew small">
               <template v-if="iAttacked">
                 <div><dt>Золото</dt><dd class="g">+{{ b.gold }}</dd></div>
                 <div><dt>Опыт</dt><dd class="x">+{{ b.xp }}</dd></div>
@@ -138,7 +142,7 @@ function roundText(r: Battle['rounds'][number]) {
               <div v-else><dt>Трофеи</dt><dd>{{ b.defender_trophies > 0 ? '+' : '' }}{{ b.defender_trophies }}</dd></div>
               <div><dt>Потери</dt><dd>{{ Object.entries(b.losses).filter(([, n]) => n > 0).map(([k, n]) => `${game.troop(k)?.name} × ${n}`).join(', ') || 'нет' }}</dd></div>
             </dl>
-            <p class="xs muted">Награду создаёт система: у защитника не отнимаются ни ресурсы, ни здания. Бои не влияют на рабочий рейтинг.</p>
+            <p class="xs muted">Дружеский бой ничего не стоит и ничего не отнимает. Бои не влияют на рабочие баллы.</p>
           </section>
           <section class="card panel stack">
             <h2>Журнал боя</h2>

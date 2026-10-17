@@ -81,7 +81,7 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
         </RouterLink>
         <div class="row wrap chips small">
           <span>Ратуша {{ city?.townhall }}</span><span>Строители {{ game.player?.builders_busy }}/{{ game.player?.builders }}</span>
-          <span>Армия {{ game.player?.army_housing }}/{{ game.player?.army_capacity }}</span><span>{{ game.player?.trophies }} трофеев</span>
+          <span>Армия {{ game.player?.army_housing }}/{{ game.player?.army_capacity }}</span>
         </div>
         <RouterLink v-if="fort" to="/fortress" class="fort-line small">
           <Icon name="flag" :size="14" />Крепость: {{ fort.fortress.hp }}% · волна {{ fort.wave.closed }}/{{ fort.wave.planned }} баллов

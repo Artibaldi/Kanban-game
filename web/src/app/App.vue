@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Toasts from './Toasts.vue'
 import ResourceBar from '../components/ResourceBar.vue'
+import GameRulesDialog from '../components/GameRulesDialog.vue'
 import { useSession } from '../stores/session'
 import { useGame } from '../stores/game'
 import { useToasts } from '../stores/toast'
@@ -22,7 +23,7 @@ const all: NavItem[] = [
   { to: '/fortress', label: 'Крепость', icon: 'flag', game: true },
   { to: '/city', label: 'Город', icon: 'castle', game: true },
   { to: '/army', label: 'Казарма', icon: 'shield', game: true },
-  { to: '/ratings', label: 'Рейтинги', icon: 'trophy' },
+  { to: '/progress', label: 'Прогресс', icon: 'chart' },
   { to: '/admin', label: 'Админ', icon: 'users', admin: true },
 ]
 const nav = computed(() => all.filter(i => (!i.game || session.gameOn) && (!i.lead || session.isLead) && (!i.admin || session.isAdmin)))
@@ -82,6 +83,7 @@ async function logout() { await session.logout(); router.push('/login') }
     </nav>
   </template>
   <main v-else id="main"><RouterView /></main>
+  <GameRulesDialog v-if="session.gameOn && session.me && !session.me.game_rules_ack" />
   <Toasts />
 </template>
 
@@ -95,6 +97,7 @@ async function logout() { await session.logout(); router.push('/login') }
 .nav-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: var(--radius-sm); color: var(--color-text-muted); text-decoration: none; font-weight: 600; font-size: var(--text-sm); white-space: nowrap; }
 .nav-link:hover { color: var(--color-text); background: var(--color-action-secondary-hover); }
 .nav-link[aria-current="page"] { color: var(--color-action-primary); background: var(--color-selected); }
+@media (max-width: 1360px) { .nav-link :deep(svg) { display: none; } .nav-link { padding: 8px 8px; } }
 .right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); flex: none; }
 .mode { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-pill); border: 1px solid var(--color-border-strong); background: var(--color-surface); font-weight: 650; font-size: var(--text-sm); cursor: pointer; }
 .mode:hover { background: var(--color-action-secondary-hover); }

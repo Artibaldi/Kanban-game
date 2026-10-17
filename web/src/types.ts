@@ -40,7 +40,7 @@ export interface TeamUser { id: string; display_name: string; role: Role; team_i
 
 export interface Player {
   gold: number; energy: number; xp: number; gold_cap: number; energy_cap: number
-  level: number; level_xp: number; level_need: number; trophies: number; shield_until: string | null
+  level: number; level_xp: number; level_need: number; trophies: number
   debt: boolean; townhall: number; builders_busy: number; builders: number
   army_capacity: number; army_housing: number; army_queued: number
 }
@@ -57,10 +57,8 @@ export interface TroopDef { type: string; name: string; role: string; hp: number
 export interface Settings {
   gold_per_point: number; energy_per_point: number; xp_per_point: number
   priority_mult: Record<string, number>; on_time_bonus: number
-  level_xp_base: number; level_xp_exp: number; attack_energy: number
-  shield_minutes: number; rematch_minutes: number; random_spread: number
-  battle_gold_base: number; battle_gold_per_percent: number; battle_xp_per_star: number
-  time_scale: number; battle_scope: 'team' | 'all'; start_gold: number; start_energy: number
+  level_xp_base: number; level_xp_exp: number; random_spread: number
+  time_scale: number; start_gold: number; start_energy: number
   overdue_damage_per_point: number; fortress_floor: number; repair_by_crowns: number[]; crown_thresholds: number[]
   wave_chest_gold: number[]; wave_chest_energy: number[]; max_defense_bonus: number; defense_score_full: number
   friendly_xp: number; friendly_per_day: number
@@ -81,10 +79,6 @@ export interface City {
 }
 
 export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number }
-export interface Opponent {
-  user_id: string; display_name: string; team: string; townhall: number; trophies: number
-  shield_until: string | null; rematch_at: string | null; available: boolean; reason: string; defense: Defense
-}
 export interface Round {
   n: number; tower_damage: number; killed: Record<string, number>; alive: Record<string, number>
   wall_damage: number; tower_hit: number; base_damage: number
