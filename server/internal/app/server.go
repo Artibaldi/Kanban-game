@@ -54,6 +54,7 @@ func (s *Server) Routes() http.Handler {
 		r.Post("/sessions/logout", s.logout)
 		r.Get("/me", s.me)
 		r.Patch("/me/settings", s.updateSettings)
+		r.Post("/me/game-rules-ack", s.ackGameRules)
 		r.Get("/game/config", s.gameConfig)
 
 		r.Get("/teams", s.listTeams)
@@ -71,7 +72,8 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/player", s.player)
 		r.Get("/ledger", s.ledger)
 		r.Get("/events", s.events)
-		r.Get("/ratings/work", s.workRating)
+		r.Get("/progress/me", s.myProgress)
+		r.Get("/progress/team", s.teamProgress)
 		r.Get("/burndown", s.burndown)
 		r.Get("/fortress", s.fortress)
 		r.Get("/waves", s.waves)

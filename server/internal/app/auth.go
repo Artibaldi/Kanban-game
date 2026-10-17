@@ -21,6 +21,8 @@ type actor struct {
 	GameMode bool
 	// AcceptFriendly: teammates may start friendly duels against this user's city.
 	AcceptFriendly bool
+	// GameRulesAck: the user has read how the game works (and that it is never used to judge work).
+	GameRulesAck bool
 }
 
 func (a actor) lead() bool  { return a.Role == "lead" || a.Role == "admin" }
@@ -44,10 +46,10 @@ func (s *Server) current(r *http.Request) (actor, error) {
 		return a, refuse(401, "login_required", "Войдите, чтобы продолжить.")
 	}
 	var team, teamName *string
-	err = s.db.QueryRow(r.Context(), `SELECT u.id::text,u.display_name,u.login,u.role,u.team_id::text,t.name,u.game_mode,u.accept_friendly
+	err = s.db.QueryRow(r.Context(), `SELECT u.id::text,u.display_name,u.login,u.role,u.team_id::text,t.name,u.game_mode,u.accept_friendly,u.game_rules_ack_at IS NOT NULL
  FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN teams t ON t.id=u.team_id
  WHERE s.token_digest=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND u.active`, digest(c.Value)).
-		Scan(&a.ID, &a.Name, &a.Login, &a.Role, &team, &teamName, &a.GameMode, &a.AcceptFriendly)
+		Scan(&a.ID, &a.Name, &a.Login, &a.Role, &team, &teamName, &a.GameMode, &a.AcceptFriendly, &a.GameRulesAck)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, refuse(401, "login_required", "Сессия закончилась. Войдите снова.")
 	}
@@ -150,8 +152,8 @@ func meDTO(a actor) map[string]any {
 	return map[string]any{
 		"id": a.ID, "display_name": a.Name, "login": a.Login, "role": a.Role,
 		"team_id": nullable(a.TeamID), "team_name": a.TeamName, "game_mode": a.GameMode,
-		"accept_friendly": a.AcceptFriendly,
-		"plays":           a.TeamID != "", "demo_auth": true,
+		"accept_friendly": a.AcceptFriendly, "game_rules_ack": a.GameRulesAck,
+		"plays": a.TeamID != "", "demo_auth": true,
 	}
 }
 

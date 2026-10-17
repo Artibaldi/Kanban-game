@@ -168,14 +168,10 @@ func findTask(t *testing.T, c *client, title string) map[string]any {
 	return nil
 }
 
-func weekPoints(t *testing.T, c *client, login string) float64 {
-	for _, it := range items(c.must(200, "GET", "/ratings/work?period=week", nil, "")) {
-		if strings.HasPrefix(strings.ToLower(it["display_name"].(string)), login) {
-			return it["points"].(float64)
-		}
-	}
-	t.Fatalf("no rating row for %s", login)
-	return 0
+// weekPoints is the client's own points this week, from their personal progress.
+func weekPoints(t *testing.T, c *client) float64 {
+	t.Helper()
+	return num(c.must(200, "GET", "/progress/me", nil, "").Body["this_week"])
 }
 
 func num(v any) float64 { return v.(float64) }
@@ -212,7 +208,7 @@ func TestEndToEnd(t *testing.T) {
 	anna.refused("not_found", "GET", "/tasks/"+id, nil)
 
 	before := alexey.must(200, "GET", "/player", nil, "").Body
-	weekBefore := weekPoints(t, irina, "алексей")
+	weekBefore := weekPoints(t, alexey)
 
 	// 2. The lead confirms. The same request repeated is a replay; a new request is refused; nothing is paid twice.
 	k := key()
@@ -240,7 +236,7 @@ func TestEndToEnd(t *testing.T) {
 	if num(after["xp"])-num(before["xp"]) != 50 || num(after["gold"])-num(before["gold"]) != num(reward["gold"]) {
 		t.Fatalf("balance moved once: before %v after %v reward %v", before, after, reward)
 	}
-	if got := weekPoints(t, irina, "алексей"); got != weekBefore+2 {
+	if got := weekPoints(t, alexey); got != weekBefore+2 {
 		t.Fatalf("work rating +2: %v → %v", weekBefore, got)
 	}
 
@@ -290,7 +286,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal("maria accepts friendly duels in the seed")
 	}
 	alexey.must(200, "GET", "/duels/"+maria+"/city", nil, "")
-	workBefore := weekPoints(t, irina, "алексей")
+	workBefore := weekPoints(t, alexey)
 	var duelWorkBefore int
 	_ = pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0) FROM work_points_events WHERE user_id=(SELECT id FROM users WHERE login='alexey')`).Scan(&duelWorkBefore)
 	pBefore := alexey.must(200, "GET", "/player", nil, "").Body
@@ -338,7 +334,7 @@ func TestEndToEnd(t *testing.T) {
 	if reversals != 1 {
 		t.Fatalf("one reversal row, got %d", reversals)
 	}
-	if got := weekPoints(t, irina, "алексей"); got != workBefore-2 {
+	if got := weekPoints(t, alexey); got != workBefore-2 {
 		t.Fatalf("reopen subtracts points: %v → %v", workBefore, got)
 	}
 	alexey.refused("debt", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 11, "y": 11})

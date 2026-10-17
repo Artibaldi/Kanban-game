@@ -274,3 +274,27 @@ func TestFortressAPI(t *testing.T) {
 	login(t, ts, "admin").refused("not_a_player", "GET", "/fortress", nil)
 	alexey.must(200, "GET", "/waves", nil, "")
 }
+
+func TestProgressHasNoPerPersonTable(t *testing.T) {
+	ts, _, _ := testServer(t)
+	irina := login(t, ts, "irina")
+	team := irina.must(200, "GET", "/progress/team", nil, "")
+	if _, ok := team.Body["items"]; ok || strings.Contains(team.Raw, "display_name") || strings.Contains(team.Raw, "user_id") {
+		t.Fatalf("no per-person rows: %s", team.Raw)
+	}
+	if len(team.Body["team_weekly"].([]any)) != 8 {
+		t.Fatalf("8 weeks: %s", team.Raw)
+	}
+	me := login(t, ts, "alexey").must(200, "GET", "/progress/me", nil, "").Body
+	if len(me["weekly"].([]any)) != 8 || num(me["total"]) <= 0 {
+		t.Fatalf("my progress: %v", me)
+	}
+	irina.must(404, "GET", "/ratings/work", nil, "")
+	if irina.must(200, "GET", "/me", nil, "").Body["game_rules_ack"] != false {
+		t.Fatal("not acknowledged yet")
+	}
+	irina.must(200, "POST", "/me/game-rules-ack", map[string]any{}, "")
+	if irina.must(200, "GET", "/me", nil, "").Body["game_rules_ack"] != true {
+		t.Fatal("acknowledged")
+	}
+}
