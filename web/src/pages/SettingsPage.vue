@@ -22,6 +22,7 @@ onMounted(async () => {
 })
 function setTheme(t: ThemeChoice) { theme.value = t; applyTheme(t) }
 async function setMode(on: boolean) { try { await session.setGameMode(on) } catch (e) { toasts.error(e) } }
+async function setFriendly(on: boolean) { try { await session.setAcceptFriendly(on) } catch (e) { toasts.error(e) } }
 </script>
 
 <template>
@@ -39,6 +40,11 @@ async function setMode(on: boolean) { try { await session.setGameMode(on) } catc
           </button>
         </div>
         <p v-if="!session.plays" class="small muted">У администратора без команды нет города.</p>
+        <p class="small muted">Игровые данные не используются для оценки работы. Режим «Работа» убирает игру, но командные награды продолжают копиться.</p>
+        <label v-if="session.plays" class="row small check">
+          <input type="checkbox" :checked="!!session.me?.accept_friendly" @change="setFriendly(($event.target as HTMLInputElement).checked)" />
+          <span><strong>Принимать дружеские бои</strong><span class="muted"> — коллеги смогут потренироваться на вашем городе. Вы ничего не теряете.</span></span>
+        </label>
         <h2>Тема</h2>
         <div class="tabs" role="tablist" aria-label="Тема">
           <button role="tab" :aria-selected="theme === 'system'" @click="setTheme('system')">Как в системе</button>

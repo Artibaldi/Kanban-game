@@ -79,7 +79,7 @@ const qProgress = (q: QueueItem) => {
         <h1>Армия</h1>
         <p class="muted">Войска готовятся за энергию. Энергию приносят подтверждённые задачи.</p>
       </div>
-      <RouterLink to="/opponents" class="btn primary"><Icon name="swords" :size="16" />К выбору соперника</RouterLink>
+      <RouterLink to="/fortress/duels" class="btn primary"><Icon name="swords" :size="16" />Дружеские бои</RouterLink>
     </div>
 
     <div v-if="p" class="capacity card panel">

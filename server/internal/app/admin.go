@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -159,5 +161,100 @@ func (s *Server) adminPutSettings(w http.ResponseWriter, r *http.Request) {
 			return 0, nil, err
 		}
 		return 200, map[string]any{"settings": in}, nil
+	})
+}
+
+type teamSettingsDTO struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	WorkDays  []int  `json:"work_days"`
+	WaveWeeks int    `json:"wave_weeks"`
+}
+
+func loadTeamSettings(ctx context.Context, q dbtx, id string) ([]teamSettingsDTO, error) {
+	rows, err := q.Query(ctx, `SELECT id::text, name, work_days, wave_weeks FROM teams WHERE ($1='' OR id::text=$1) ORDER BY name`, id)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (teamSettingsDTO, error) {
+		var t teamSettingsDTO
+		var days []int16
+		err := row.Scan(&t.ID, &t.Name, &days, &t.WaveWeeks)
+		t.WorkDays = make([]int, len(days))
+		for i, d := range days {
+			t.WorkDays[i] = int(d)
+		}
+		return t, err
+	})
+}
+
+// adminTeams lists every team's working days and wave length.
+func (s *Server) adminTeams(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.adminOnly(w, r); !ok {
+		return
+	}
+	list, err := loadTeamSettings(r.Context(), s.db, "")
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	respond(w, 200, map[string]any{"items": list})
+}
+
+// adminPatchTeam changes a team's working days (no fortress damage on other days) and wave length.
+// A new length applies from the next wave: the open wave keeps its end.
+func (s *Server) adminPatchTeam(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			WorkDays  *[]int `json:"work_days"`
+			WaveWeeks *int   `json:"wave_weeks"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		if in.WorkDays != nil {
+			seen := map[int]bool{}
+			for _, d := range *in.WorkDays {
+				if d < 1 || d > 7 || seen[d] {
+					return 0, nil, refuse(422, "invalid_work_days", "Рабочие дни — дни недели от 1 (пн) до 7 (вс), без повторов.")
+				}
+				seen[d] = true
+			}
+			if len(seen) == 0 {
+				return 0, nil, refuse(422, "invalid_work_days", "Выберите хотя бы один рабочий день.")
+			}
+			days := slices.Sorted(maps.Keys(seen))
+			if _, err := tx.Exec(ctx, `UPDATE teams SET work_days=$2 WHERE id=$1`, id, days); err != nil {
+				return 0, nil, err
+			}
+		}
+		if in.WaveWeeks != nil {
+			if *in.WaveWeeks < 1 || *in.WaveWeeks > 4 {
+				return 0, nil, refuse(422, "invalid_wave_weeks", "Длина волны — от 1 до 4 недель.")
+			}
+			if _, err := tx.Exec(ctx, `UPDATE teams SET wave_weeks=$2 WHERE id=$1`, id, *in.WaveWeeks); err != nil {
+				return 0, nil, err
+			}
+		}
+		list, err := loadTeamSettings(ctx, tx, id)
+		if err != nil {
+			return 0, nil, err
+		}
+		if len(list) == 0 {
+			return 0, nil, refuse(404, "not_found", "Команда не найдена.")
+		}
+		if err := audit(ctx, tx, a.ID, id, "admin.team", "team", id, "Изменены рабочие дни и длина волны команды «"+list[0].Name+"»"); err != nil {
+			return 0, nil, err
+		}
+		return 200, list[0], nil
 	})
 }

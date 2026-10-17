@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"kanban-game/server/internal/game"
 )
 
 // Demo data for the local prototype: two teams, eight people, tasks in every column, six weeks of confirmed work
@@ -122,7 +124,8 @@ var seedTroops = map[string]map[string]int{
 	"pavel":  {"guard": 10, "raider": 6, "ram": 4},
 }
 
-var seedTrophies = map[string]int{"alexey": 142, "maria": 96, "dmitry": 38, "irina": 71, "sergey": 64, "anna": 88, "pavel": 131}
+// seedDuelists accept friendly duels from teammates in the demo.
+var seedDuelists = map[string]bool{"alexey": true, "maria": true, "anna": true}
 
 // Seed fills an empty database. It is a no-op once any user exists.
 func (s *Server) Seed(ctx context.Context) (bool, error) {
@@ -145,6 +148,9 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		if err := tx.QueryRow(ctx, `INSERT INTO teams(name) VALUES($1) RETURNING id::text`, name).Scan(&id); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(ctx, `INSERT INTO fortresses(team_id) VALUES($1) ON CONFLICT DO NOTHING`, id); err != nil {
+			return err
+		}
 		teams[name] = id
 	}
 	users := map[string]actor{}
@@ -154,7 +160,8 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		if u.team != "" {
 			team = teams[u.team]
 		}
-		if err := tx.QueryRow(ctx, `INSERT INTO users(login,display_name,role,team_id,title) VALUES($1,$2,$3,$4,$5) RETURNING id::text`, u.login, u.name, u.role, team, u.title).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO users(login,display_name,role,team_id,title,accept_friendly) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`,
+			u.login, u.name, u.role, team, u.title, seedDuelists[u.login]).Scan(&id); err != nil {
 			return err
 		}
 		a := actor{ID: id, Name: u.name, Login: u.login, Role: u.role}
@@ -175,7 +182,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	// Players and cities first: storage caps apply to the historical rewards below.
 	for login, layout := range seedCities() {
 		u := users[login]
-		if _, err := tx.Exec(ctx, `INSERT INTO players(user_id,trophies) VALUES($1,$2)`, u.ID, seedTrophies[login]); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO players(user_id) VALUES($1)`, u.ID); err != nil {
 			return err
 		}
 		if _, err := applyLedger(ctx, tx, ledgerEntry{UserID: u.ID, Kind: "seed", Gold: 300, Energy: 60, Note: "Стартовый запас города", At: ptrTime(now.AddDate(0, 0, -45))}); err != nil {
@@ -222,7 +229,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		}
 		var due any
 		if st.due != nil {
-			due = now.AddDate(0, 0, *st.due).Format("2006-01-02")
+			due = now.UTC().AddDate(0, 0, *st.due).Format("2006-01-02") // the fortress counts overdue days in UTC
 		} else if st.state == "done" {
 			due = day(st.approvedAgo - 1).Format("2006-01-02")
 			if i%3 == 0 {
@@ -274,6 +281,25 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	if _, err := tx.Exec(ctx, `UPDATE audit_events e SET created_at=l.created_at FROM ledger l
  WHERE e.action='task.approved' AND l.task_id::text=e.target_id AND l.kind='task_reward'`); err != nil {
 		return err
+	}
+	// Three past waves of «Платформа» (3, 1 and 2 crowns) and a slightly damaged fortress.
+	st := game.DefaultSettings()
+	for i, t := range []game.WaveTally{{Planned: 21, Closed: 21}, {Planned: 24, Closed: 13, Overdue: 2, OverdueP1: 1}, {Planned: 18, Closed: 15, Overdue: 1}} {
+		start, end := game.WaveWindow(now.AddDate(0, 0, -7*(3-i)), 1)
+		crowns := game.Crowns(st, t)
+		if _, err := tx.Exec(ctx, `INSERT INTO waves(team_id,starts_at,ends_at,planned_points,closed_points,overdue_count,overdue_p1_count,crowns,defense_bonus,summary,settled_at)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$3)`, teams["Платформа"], start, end, t.Planned, t.Closed, t.Overdue, t.OverdueP1, crowns, game.WaveSummary(t, crowns)); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE fortresses SET hp=85, level=3 WHERE team_id=$1`, teams["Платформа"]); err != nil {
+		return err
+	}
+	// The current wave of each team, with the enemies on the board as its plan.
+	for _, id := range teams {
+		if _, err := ensureWave(ctx, tx, id, now); err != nil {
+			return err
+		}
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO audit_events(action,target_type,summary) VALUES('seed','system','Созданы демонстрационные данные')`)
 	return err

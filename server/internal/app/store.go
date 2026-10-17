@@ -73,6 +73,7 @@ type ledgerEntry struct {
 	Gold, Energy, XP             int64
 	GoldFormula, EnergyFormula   *int64
 	TaskID, BattleID, BuildingID string
+	WaveID                       string
 	ActorID, Note                string
 	ReversesID                   *int64
 	At                           *time.Time
@@ -84,10 +85,10 @@ func applyLedger(ctx context.Context, tx pgx.Tx, e ledgerEntry) (int64, error) {
 	if e.At != nil {
 		at = *e.At
 	}
-	err := tx.QueryRow(ctx, `INSERT INTO ledger(user_id,kind,gold,energy,xp,gold_formula,energy_formula,task_id,battle_id,building_id,actor_id,note,created_at,reverses_id)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+	err := tx.QueryRow(ctx, `INSERT INTO ledger(user_id,kind,gold,energy,xp,gold_formula,energy_formula,task_id,battle_id,building_id,actor_id,note,created_at,reverses_id,wave_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
 		e.UserID, e.Kind, e.Gold, e.Energy, e.XP, e.GoldFormula, e.EnergyFormula,
-		nullable(e.TaskID), nullable(e.BattleID), nullable(e.BuildingID), nullable(e.ActorID), e.Note, at, e.ReversesID).Scan(&id)
+		nullable(e.TaskID), nullable(e.BattleID), nullable(e.BuildingID), nullable(e.ActorID), e.Note, at, e.ReversesID, nullable(e.WaveID)).Scan(&id)
 	if err != nil {
 		return 0, err
 	}
@@ -163,19 +164,31 @@ func (s *Server) settleNow(ctx context.Context, userID string) error {
 	return s.inTx(ctx, func(tx pgx.Tx) error { return settle(ctx, tx, userID) })
 }
 
-// RunTimers is the server-side clock: it completes due buildings and training every second until ctx ends.
+// RunTimers is the server-side clock: it completes due buildings and training every second, and runs the co-op
+// tick (waves, fortress damage) at start and every 30 seconds, until ctx ends.
 func (s *Server) RunTimers(ctx context.Context) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
+	coop := time.NewTicker(30 * time.Second)
+	defer coop.Stop()
+	s.runCoopTick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-coop.C:
+			s.runCoopTick(ctx)
 		case <-t.C:
 			if err := s.inTx(ctx, func(tx pgx.Tx) error { return settle(ctx, tx, "") }); err != nil && ctx.Err() == nil {
 				log.Printf("timers: %v", err)
 			}
 		}
+	}
+}
+
+func (s *Server) runCoopTick(ctx context.Context) {
+	if err := s.coopTick(ctx); err != nil && ctx.Err() == nil {
+		log.Printf("co-op: %v", err)
 	}
 }
 

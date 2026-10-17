@@ -11,7 +11,7 @@ import { stateName } from '../lib/board'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
-import type { City, FeedItem, Task } from '../types'
+import type { City, FeedItem, FortressState, MyProgress, Task } from '../types'
 
 const session = useSession()
 const game = useGame()
@@ -20,7 +20,8 @@ const router = useRouter()
 const tasks = ref<Task[]>([])
 const feed = ref<FeedItem[]>([])
 const city = ref<City | null>(null)
-const week = ref<{ points: number; tasks: number; rank: number; of: number } | null>(null)
+const week = ref<MyProgress | null>(null)
+const fort = ref<FortressState | null>(null)
 const reviewCount = ref(0)
 
 onMounted(async () => {
@@ -28,18 +29,20 @@ onMounted(async () => {
     const [t, f, w] = await Promise.all([
       api.get<{ items: Task[] }>('/tasks?assignee=me'),
       api.get<{ items: FeedItem[] }>('/events?limit=12'),
-      session.me?.team_id ? api.get<{ items: { user_id: string; points: number; tasks: number }[] }>('/ratings/work?period=week') : Promise.resolve({ items: [] }),
+      session.me?.team_id ? api.get<MyProgress>('/progress/me') : Promise.resolve(null),
     ])
     tasks.value = t.items
     feed.value = f.items
-    const i = w.items.findIndex(r => r.user_id === session.me?.id)
-    if (i >= 0) week.value = { points: w.items[i].points, tasks: w.items[i].tasks, rank: i + 1, of: w.items.length }
+    week.value = w
     if (session.isLead) reviewCount.value = (await api.get<{ review: Task[] }>('/review')).review.length
-    if (session.gameOn) { city.value = await api.get<City>('/city'); game.setPlayer(city.value.player); game.loadConfig() }
+    if (session.gameOn) {
+      city.value = await api.get<City>('/city'); game.setPlayer(city.value.player); game.loadConfig()
+      fort.value = await api.get<FortressState>('/fortress')
+    }
   } catch (e) { toasts.error(e) }
 })
 const active = computed(() => tasks.value.filter(t => t.state !== 'done' && t.state !== 'backlog').sort((a, b) => ['in_progress', 'review', 'ready'].indexOf(a.state) - ['in_progress', 'review', 'ready'].indexOf(b.state)))
-const feedIcon = (a: string) => (a.startsWith('battle') ? 'swords' : a.startsWith('building') ? 'hammer' : a.startsWith('army') ? 'shield' : a === 'task.approved' ? 'check' : a === 'task.reopened' ? 'undo' : 'board')
+const feedIcon = (a: string) => (a.startsWith('wave') ? 'flag' : a.startsWith('battle') ? 'swords' : a.startsWith('building') ? 'hammer' : a.startsWith('army') ? 'shield' : a === 'task.approved' ? 'check' : a === 'task.reopened' ? 'undo' : 'board')
 const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер' })
 </script>
 
@@ -64,9 +67,9 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
           <TaskCard v-for="t in active.slice(0, 6)" :key="t.id" :task="t" @open="router.push(`/board?task=${t.id}`)" />
         </div>
         <div v-if="week" class="weekline">
-          <div><span class="big num">{{ week.points }}</span><span class="muted small"> баллов за неделю</span></div>
-          <div class="small muted">{{ week.tasks }} подтверждённых задач · {{ week.rank }} место из {{ week.of }} в команде</div>
-          <RouterLink to="/ratings" class="small">Рейтинги и график бэклога</RouterLink>
+          <div><span class="big num">{{ week.this_week }}</span><span class="muted small"> баллов за неделю</span></div>
+          <div class="small muted">Лучшая неделя: {{ week.best_week }} · всего {{ week.total }}</div>
+          <RouterLink to="/progress" class="small">Прогресс и график бэклога</RouterLink>
         </div>
       </section>
 
@@ -78,9 +81,11 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
         </RouterLink>
         <div class="row wrap chips small">
           <span>Ратуша {{ city?.townhall }}</span><span>Строители {{ game.player?.builders_busy }}/{{ game.player?.builders }}</span>
-          <span>Армия {{ game.player?.army_housing }}/{{ game.player?.army_capacity }}</span><span>{{ game.player?.trophies }} трофеев</span>
-          <span v-if="game.player?.shield_until" class="badge info">Щит до {{ dateTime(game.player.shield_until) }}</span>
+          <span>Армия {{ game.player?.army_housing }}/{{ game.player?.army_capacity }}</span>
         </div>
+        <RouterLink v-if="fort" to="/fortress" class="fort-line small">
+          <Icon name="flag" :size="14" />Крепость: {{ fort.fortress.hp }}% · волна {{ fort.wave.closed }}/{{ fort.wave.planned }} баллов
+        </RouterLink>
       </section>
 
       <section class="card panel stack feed">
@@ -108,6 +113,7 @@ body.work-mode .grid, .grid:not(:has(.city-card)) { grid-template-areas: "main f
 .weekline { display: flex; flex-direction: column; gap: 4px; padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
 .big { font-family: var(--font-display); font-size: var(--text-display); font-weight: 700; color: var(--color-action-primary); line-height: 1; }
 .res { flex-wrap: wrap; }
+.fort-line { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
 .scene-link { display: block; max-width: 460px; margin: 0 auto; width: 100%; }
 .chips span:not(.badge) { background: var(--color-surface); padding: 2px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); }
 .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }

@@ -25,7 +25,7 @@ import (
 // The end-to-end test runs the real HTTP API against a throwaway PostgreSQL database created next to DATABASE_URL.
 // It is skipped when DATABASE_URL is not set. Run: DATABASE_URL=postgres://kanban:kanban-local-only@127.0.0.1:15433/kanban?sslmode=disable go test ./...
 
-func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
+func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool, *Server) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		t.Skip("DATABASE_URL is not set")
@@ -69,7 +69,7 @@ func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
 	tctx, cancel := context.WithCancel(ctx)
 	go s.RunTimers(tctx)
 	t.Cleanup(func() { cancel(); ts.Close() })
-	return ts, pool
+	return ts, pool, s
 }
 
 type client struct {
@@ -168,14 +168,10 @@ func findTask(t *testing.T, c *client, title string) map[string]any {
 	return nil
 }
 
-func weekPoints(t *testing.T, c *client, login string) float64 {
-	for _, it := range items(c.must(200, "GET", "/ratings/work?period=week", nil, "")) {
-		if strings.HasPrefix(strings.ToLower(it["display_name"].(string)), login) {
-			return it["points"].(float64)
-		}
-	}
-	t.Fatalf("no rating row for %s", login)
-	return 0
+// weekPoints is the client's own points this week, from their personal progress.
+func weekPoints(t *testing.T, c *client) float64 {
+	t.Helper()
+	return num(c.must(200, "GET", "/progress/me", nil, "").Body["this_week"])
 }
 
 func num(v any) float64 { return v.(float64) }
@@ -192,7 +188,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ts, pool := testServer(t)
+	ts, pool, _ := testServer(t)
 	ctx := context.Background()
 	alexey := login(t, ts, "alexey")
 	irina := login(t, ts, "irina")
@@ -212,7 +208,7 @@ func TestEndToEnd(t *testing.T) {
 	anna.refused("not_found", "GET", "/tasks/"+id, nil)
 
 	before := alexey.must(200, "GET", "/player", nil, "").Body
-	weekBefore := weekPoints(t, irina, "алексей")
+	weekBefore := weekPoints(t, alexey)
 
 	// 2. The lead confirms. The same request repeated is a replay; a new request is refused; nothing is paid twice.
 	k := key()
@@ -240,7 +236,7 @@ func TestEndToEnd(t *testing.T) {
 	if num(after["xp"])-num(before["xp"]) != 50 || num(after["gold"])-num(before["gold"]) != num(reward["gold"]) {
 		t.Fatalf("balance moved once: before %v after %v reward %v", before, after, reward)
 	}
-	if got := weekPoints(t, irina, "алексей"); got != weekBefore+2 {
+	if got := weekPoints(t, alexey); got != weekBefore+2 {
 		t.Fatalf("work rating +2: %v → %v", weekBefore, got)
 	}
 
@@ -274,30 +270,49 @@ func TestEndToEnd(t *testing.T) {
 	}
 	dmitry.refused("insufficient_gold", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 0, "y": 0})
 
-	// 5. Army and battle: train, attack a rival of close level; the rival is shielded afterwards.
+	// 5. Army and a friendly duel: no energy, no losses, no trophies; a daily limit; only colleagues who accept duels.
 	alexey.must(201, "POST", "/army/train", map[string]any{"type": "guard", "count": 2}, "")
 	waitFor(t, "training", func() bool {
 		a := alexey.must(200, "GET", "/army", nil, "").Body
 		return num(a["troops"].(map[string]any)["guard"]) == 12
 	})
 	var maria string
-	for _, o := range items(alexey.must(200, "GET", "/opponents", nil, "")) {
+	for _, o := range items(alexey.must(200, "GET", "/duels", nil, "")) {
 		if o["display_name"] == "Мария Иванова" {
 			maria = o["user_id"].(string)
 		}
 	}
-	energyBefore := num(alexey.must(200, "GET", "/player", nil, "").Body["energy"])
-	workBefore := weekPoints(t, irina, "алексей")
-	battle := alexey.must(201, "POST", "/battles", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 8, "raider": 6, "ram": 3}}, "")
-	if len(battle.Body["rounds"].([]any)) == 0 {
-		t.Fatalf("battle log: %s", battle.Raw)
+	if maria == "" {
+		t.Fatal("maria accepts friendly duels in the seed")
 	}
-	if e := num(alexey.must(200, "GET", "/player", nil, "").Body["energy"]); energyBefore-e != 20 {
-		t.Fatalf("attack costs 20 energy: %v → %v", energyBefore, e)
+	alexey.must(200, "GET", "/duels/"+maria+"/city", nil, "")
+	workBefore := weekPoints(t, alexey)
+	var duelWorkBefore int
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0) FROM work_points_events WHERE user_id=(SELECT id FROM users WHERE login='alexey')`).Scan(&duelWorkBefore)
+	pBefore := alexey.must(200, "GET", "/player", nil, "").Body
+	armyBefore := alexey.must(200, "GET", "/army", nil, "").Body["troops"].(map[string]any)
+	duel := alexey.must(201, "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 8, "raider": 6, "ram": 3}}, "")
+	if duel.Body["kind"] != "friendly" || len(duel.Body["rounds"].([]any)) == 0 {
+		t.Fatalf("duel: %s", duel.Raw)
 	}
-	alexey.refused("shielded", "POST", "/battles", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}})
-	if got := weekPoints(t, irina, "алексей"); got != workBefore {
-		t.Fatalf("battles must not change the work rating: %v → %v", workBefore, got)
+	pAfter := alexey.must(200, "GET", "/player", nil, "").Body
+	if num(pAfter["energy"]) != num(pBefore["energy"]) || num(pAfter["trophies"]) != num(pBefore["trophies"]) || num(pAfter["gold"]) != num(pBefore["gold"]) {
+		t.Fatalf("a friendly duel is free: %v → %v", pBefore, pAfter)
+	}
+	if got := alexey.must(200, "GET", "/army", nil, "").Body["troops"].(map[string]any); num(got["guard"]) != num(armyBefore["guard"]) || num(got["ram"]) != num(armyBefore["ram"]) {
+		t.Fatalf("no losses: %v → %v", armyBefore, got)
+	}
+	for i := 0; i < 2; i++ {
+		alexey.must(201, "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}}, "")
+	}
+	alexey.refused("friendly_limit", "POST", "/battles/friendly", map[string]any{"defender_id": maria, "army": map[string]int{"guard": 1}})
+	dmitryID := dmitry.must(200, "GET", "/me", nil, "").Body["id"].(string)
+	alexey.refused("not_found", "POST", "/battles/friendly", map[string]any{"defender_id": dmitryID, "army": map[string]int{"guard": 1}}) // does not accept duels
+	alexey.must(404, "GET", "/opponents", nil, "")
+	var duelWorkAfter int
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(SUM(points),0) FROM work_points_events WHERE user_id=(SELECT id FROM users WHERE login='alexey')`).Scan(&duelWorkAfter)
+	if duelWorkAfter != duelWorkBefore {
+		t.Fatalf("duels must not change the work rating: %v → %v", duelWorkBefore, duelWorkAfter)
 	}
 	var mariaBuildings int
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM buildings WHERE user_id=$1`, maria).Scan(&mariaBuildings)
@@ -319,7 +334,7 @@ func TestEndToEnd(t *testing.T) {
 	if reversals != 1 {
 		t.Fatalf("one reversal row, got %d", reversals)
 	}
-	if got := weekPoints(t, irina, "алексей"); got != workBefore-2 {
+	if got := weekPoints(t, alexey); got != workBefore-2 {
 		t.Fatalf("reopen subtracts points: %v → %v", workBefore, got)
 	}
 	alexey.refused("debt", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 11, "y": 11})

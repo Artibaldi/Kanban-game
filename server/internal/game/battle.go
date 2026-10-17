@@ -247,36 +247,6 @@ func Fight(army map[string]int, d Defense, seed int64, spread float64) Outcome {
 	return out
 }
 
-// BattleReward: system-issued gold and xp for the attacker; the defender loses nothing but trophies.
-type BattleReward struct {
-	Gold             int64 `json:"gold"`
-	XP               int64 `json:"xp"`
-	AttackerTrophies int   `json:"attacker_trophies"`
-	DefenderTrophies int   `json:"defender_trophies"`
-}
-
-func RewardFor(s Settings, o Outcome, defenderTH int) BattleReward {
-	r := BattleReward{}
-	if o.Destruction > 0 {
-		r.Gold = int64(math.Round(s.BattleGoldBase + s.BattleGoldPerPercent*float64(o.Destruction)*(1+0.25*float64(defenderTH-1))))
-	}
-	r.XP = int64(math.Round(5 + s.BattleXPPerStar*float64(o.Stars)))
-	if o.Stars == 0 {
-		r.AttackerTrophies = -5
-		r.DefenderTrophies = 5
-	} else {
-		r.AttackerTrophies = 8 * o.Stars
-		r.DefenderTrophies = -3 * o.Stars
-	}
-	return r
-}
-
-// Opponent matching: town hall within ±1 of the attacker.
-func InRange(attackerTH, defenderTH int) bool {
-	diff := attackerTH - defenderTH
-	return diff >= -1 && diff <= 1
-}
-
 // SortedTypes returns troop types present in an army in battle order.
 func SortedTypes(army map[string]int) []string {
 	out := []string{}

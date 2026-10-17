@@ -19,6 +19,10 @@ type actor struct {
 	TeamID   string // empty for an administrator without a team
 	TeamName string
 	GameMode bool
+	// AcceptFriendly: teammates may start friendly duels against this user's city.
+	AcceptFriendly bool
+	// GameRulesAck: the user has read how the game works (and that it is never used to judge work).
+	GameRulesAck bool
 }
 
 func (a actor) lead() bool  { return a.Role == "lead" || a.Role == "admin" }
@@ -42,10 +46,10 @@ func (s *Server) current(r *http.Request) (actor, error) {
 		return a, refuse(401, "login_required", "Войдите, чтобы продолжить.")
 	}
 	var team, teamName *string
-	err = s.db.QueryRow(r.Context(), `SELECT u.id::text,u.display_name,u.login,u.role,u.team_id::text,t.name,u.game_mode
+	err = s.db.QueryRow(r.Context(), `SELECT u.id::text,u.display_name,u.login,u.role,u.team_id::text,t.name,u.game_mode,u.accept_friendly,u.game_rules_ack_at IS NOT NULL
  FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN teams t ON t.id=u.team_id
  WHERE s.token_digest=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND u.active`, digest(c.Value)).
-		Scan(&a.ID, &a.Name, &a.Login, &a.Role, &team, &teamName, &a.GameMode)
+		Scan(&a.ID, &a.Name, &a.Login, &a.Role, &team, &teamName, &a.GameMode, &a.AcceptFriendly, &a.GameRulesAck)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return a, refuse(401, "login_required", "Сессия закончилась. Войдите снова.")
 	}
@@ -148,6 +152,7 @@ func meDTO(a actor) map[string]any {
 	return map[string]any{
 		"id": a.ID, "display_name": a.Name, "login": a.Login, "role": a.Role,
 		"team_id": nullable(a.TeamID), "team_name": a.TeamName, "game_mode": a.GameMode,
+		"accept_friendly": a.AcceptFriendly, "game_rules_ack": a.GameRulesAck,
 		"plays": a.TeamID != "", "demo_auth": true,
 	}
 }
@@ -163,7 +168,8 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var in struct {
-		GameMode *bool `json:"game_mode"`
+		GameMode       *bool `json:"game_mode"`
+		AcceptFriendly *bool `json:"accept_friendly"`
 	}
 	if err = decodeInto(raw, &in); err != nil {
 		failErr(w, err)
@@ -175,6 +181,13 @@ func (s *Server) updateSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.GameMode = *in.GameMode
+	}
+	if in.AcceptFriendly != nil {
+		if _, err = s.db.Exec(r.Context(), `UPDATE users SET accept_friendly=$2 WHERE id=$1`, a.ID, *in.AcceptFriendly); err != nil {
+			failErr(w, err)
+			return
+		}
+		a.AcceptFriendly = *in.AcceptFriendly
 	}
 	respond(w, 200, meDTO(a))
 }

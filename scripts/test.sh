@@ -5,4 +5,6 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 docker compose -f "$root/compose.local.yml" up -d --wait
 export DATABASE_URL="${DATABASE_URL:-postgres://kanban:kanban-local-only@127.0.0.1:15433/kanban?sslmode=disable}"
 ( cd "$root/server" && go vet ./... && go test -count=1 ./... )
+# Waves and progress weeks are UTC: the API must not depend on the server's own timezone.
+( cd "$root/server" && TZ=America/New_York go test -count=1 ./internal/app/ )
 ( cd "$root/web" && npm test && npm run build )

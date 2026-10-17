@@ -94,7 +94,6 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
       <div v-if="player" class="stats">
         <span class="stat"><Icon name="hammer" :size="16" />Строители {{ player.builders_busy }}/{{ player.builders }}</span>
         <span class="stat"><Icon name="shield" :size="16" />Армия {{ player.army_housing }}/{{ player.army_capacity }}</span>
-        <span class="stat"><Icon name="trophy" :size="16" />{{ player.trophies }} трофеев</span>
       </div>
     </div>
     <p v-if="player?.debt" class="notice danger" style="margin-bottom: 16px">После отмены награды баланс отрицательный. Строительство откроется, когда следующие награды погасят долг.</p>

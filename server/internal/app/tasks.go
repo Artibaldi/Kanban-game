@@ -407,6 +407,10 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		if err = audit(ctx, tx, a.ID, teamID, "task.created", "task", id, t.Number+" «"+t.Title+"»"); err != nil {
 			return 0, nil, err
 		}
+		// A lead's task created in «К выполнению» is an enemy at once.
+		if err = syncWavePlan(ctx, tx, id, s.now()); err != nil {
+			return 0, nil, err
+		}
 		return 201, t, nil
 	})
 }
@@ -453,6 +457,9 @@ func (s *Server) patchTask(w http.ResponseWriter, r *http.Request) {
 		lead := a.leadOf(t.TeamID)
 		mine := t.AssigneeID != nil && *t.AssigneeID == a.ID || t.CreatedByID == a.ID
 		now := time.Now()
+		if _, err = ensureWave(ctx, tx, t.TeamID, s.now()); err != nil {
+			return 0, nil, err
+		}
 		changed := false
 		if in.Title != nil || in.Description != nil || in.Priority != nil || in.DueDate != nil {
 			if !lead && !mine {
@@ -564,6 +571,9 @@ func (s *Server) patchTask(w http.ResponseWriter, r *http.Request) {
 				return 0, nil, err
 			}
 		}
+		if err = syncWavePlan(ctx, tx, id, s.now()); err != nil {
+			return 0, nil, err
+		}
 		out, err := taskDetail(ctx, tx, a, id)
 		return 200, out, err
 	})
@@ -642,6 +652,9 @@ func (s *Server) approveEstimate(w http.ResponseWriter, r *http.Request) {
 			return 0, nil, refuse(403, "forbidden", "Согласовать сложность может только руководитель команды.")
 		}
 		now := time.Now()
+		if _, err = ensureWave(ctx, tx, t.TeamID, s.now()); err != nil {
+			return 0, nil, err
+		}
 		if in.Points == 0 {
 			in.Points = t.Points
 		}
@@ -667,6 +680,9 @@ func (s *Server) approveEstimate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if _, err = tx.Exec(ctx, `UPDATE tasks SET version=version+1, updated_at=now() WHERE id=$1`, id); err != nil {
+			return 0, nil, err
+		}
+		if err = syncWavePlan(ctx, tx, id, s.now()); err != nil {
 			return 0, nil, err
 		}
 		out, err := taskDetail(ctx, tx, a, id)
@@ -740,6 +756,9 @@ func (s *Server) transitionTask(w http.ResponseWriter, r *http.Request) {
 		}
 		out := map[string]any{}
 		now := time.Now()
+		if _, err = ensureWave(ctx, tx, t.TeamID, s.now()); err != nil {
+			return 0, nil, err
+		}
 		from := t.State
 		lead := a.leadOf(t.TeamID)
 		comment := strings.TrimSpace(in.Comment)
@@ -805,6 +824,9 @@ func (s *Server) transitionTask(w http.ResponseWriter, r *http.Request) {
 			return 0, nil, err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE tasks SET version=version+1, updated_at=now() WHERE id=$1`, id); err != nil {
+			return 0, nil, err
+		}
+		if err = syncWavePlan(ctx, tx, id, s.now()); err != nil {
 			return 0, nil, err
 		}
 		nt, err := loadTask(ctx, tx, a, id, false)

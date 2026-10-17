@@ -32,13 +32,9 @@ func playerState(ctx context.Context, q dbtx, userID string) (map[string]any, er
 		return nil, err
 	}
 	housing := game.Housing(troops)
-	var shield *time.Time
-	if b.ShieldUntil != nil && b.ShieldUntil.After(time.Now()) {
-		shield = b.ShieldUntil
-	}
 	return map[string]any{
 		"gold": b.Gold, "energy": b.Energy, "xp": b.XP, "gold_cap": capG, "energy_cap": capE,
-		"level": level, "level_xp": into, "level_need": need, "trophies": b.Trophies, "shield_until": shield,
+		"level": level, "level_xp": into, "level_need": need, "trophies": b.Trophies,
 		"debt": b.Gold < 0 || b.Energy < 0, "townhall": c.TownHall(), "builders_busy": c.BuildersBusy(), "builders": game.MaxBuilders,
 		"army_capacity": c.ArmyCapacity(), "army_housing": housing, "army_queued": queued,
 	}, nil
@@ -137,109 +133,6 @@ func teamScope(a actor, r *http.Request) (string, error) {
 
 // workRating: sum of complexity points of confirmed tasks (reversals subtract) inside one team, optionally one project.
 // Battles never write to work_points_events, so they cannot affect this rating.
-func (s *Server) workRating(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.authed(w, r)
-	if !ok {
-		return
-	}
-	team, err := teamScope(a, r)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	project := r.URL.Query().Get("project")
-	if project != "" && !validUUID(project) {
-		project = ""
-	}
-	period := r.URL.Query().Get("period")
-	var from time.Time
-	now := time.Now()
-	weekStart := startOfWeek(now)
-	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	switch period {
-	case "week":
-		from = weekStart
-	case "month":
-		from = monthStart
-	default:
-		period = "all"
-		from = time.Unix(0, 0)
-	}
-	ctx := r.Context()
-	rows, err := s.db.Query(ctx, `SELECT u.id::text,u.display_name,u.role,
- COALESCE(SUM(w.points) FILTER (WHERE w.created_at>=$3),0),
- COALESCE(SUM(sign(w.points)) FILTER (WHERE w.created_at>=$3),0),
- COALESCE(SUM(w.points) FILTER (WHERE w.created_at>=$4),0),
- COALESCE(SUM(w.points) FILTER (WHERE w.created_at>=$5),0),
- COALESCE(SUM(w.points),0)
- FROM users u LEFT JOIN work_points_events w ON w.user_id=u.id AND w.team_id=u.team_id AND ($2='' OR w.project_id::text=$2)
- WHERE u.team_id=$1 AND u.active GROUP BY u.id ORDER BY 4 DESC, 8 DESC, u.display_name`, team, project, from, weekStart, monthStart)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
-		var id, name, role string
-		var points, tasks, week, month, all int64
-		err := row.Scan(&id, &name, &role, &points, &tasks, &week, &month, &all)
-		return map[string]any{"user_id": id, "display_name": name, "role": role, "points": points, "tasks": tasks, "week": week, "month": month, "all": all}, err
-	})
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	// Weekly dynamics for the last 8 weeks, per user and for the team.
-	first := weekStart.AddDate(0, 0, -7*7)
-	rows, err = s.db.Query(ctx, `SELECT w.user_id::text, date_trunc('week', w.created_at) wk, SUM(w.points)
- FROM work_points_events w WHERE w.team_id=$1 AND ($2='' OR w.project_id::text=$2) AND w.created_at>=$3 GROUP BY 1,2`, team, project, first)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	type cell struct {
-		user string
-		wk   time.Time
-		pts  int64
-	}
-	cells, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (cell, error) {
-		var c cell
-		err := row.Scan(&c.user, &c.wk, &c.pts)
-		return c, err
-	})
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	weeks := make([]string, 8)
-	idx := map[string]int{}
-	for i := range weeks {
-		weeks[i] = first.AddDate(0, 0, 7*i).Format("2006-01-02")
-		idx[weeks[i]] = i
-	}
-	teamSeries := make([]int64, 8)
-	perUser := map[string][]int64{}
-	for _, c := range cells {
-		i, ok := idx[c.wk.Format("2006-01-02")]
-		if !ok {
-			continue
-		}
-		teamSeries[i] += c.pts
-		if perUser[c.user] == nil {
-			perUser[c.user] = make([]int64, 8)
-		}
-		perUser[c.user][i] += c.pts
-	}
-	for _, it := range items {
-		series := perUser[it["user_id"].(string)]
-		if series == nil {
-			series = make([]int64, 8)
-		}
-		it["weekly"] = series
-	}
-	respond(w, 200, map[string]any{"period": period, "from": from, "items": items, "weeks": weeks, "team_weekly": teamSeries,
-		"explanation": "Очки = сумма баллов сложности задач, подтверждённых руководителем за период. Возврат задачи из «Выполнено» вычитает её баллы. Бои и игровые ресурсы на рейтинг не влияют."})
-}
-
 func startOfWeek(t time.Time) time.Time {
 	d := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 	wd := int(d.Weekday())
@@ -247,44 +140,6 @@ func startOfWeek(t time.Time) time.Time {
 		wd = 7
 	}
 	return d.AddDate(0, 0, -(wd - 1))
-}
-
-// battleRating: trophies, wins and attacks among the players the actor may fight.
-func (s *Server) battleRating(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.authed(w, r)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
-	st, err := loadSettings(ctx, s.db)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	all := st.BattleScope == "all" || a.admin()
-	rows, err := s.db.Query(ctx, `SELECT u.id::text,u.display_name,t.name,p.trophies,
- (SELECT count(*) FROM battles b WHERE b.attacker_id=u.id AND b.stars>0),
- (SELECT count(*) FROM battles b WHERE b.attacker_id=u.id),
- (SELECT count(*) FROM battles b WHERE b.defender_id=u.id AND b.stars=0),
- COALESCE((SELECT level FROM buildings WHERE user_id=u.id AND type='townhall'),0)
- FROM players p JOIN users u ON u.id=p.user_id JOIN teams t ON t.id=u.team_id
- WHERE u.active AND ($1 OR u.team_id::text=$2) ORDER BY p.trophies DESC, u.display_name`, all, a.TeamID)
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	out, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
-		var id, name, team string
-		var trophies, th int
-		var wins, attacks, defenses int64
-		err := row.Scan(&id, &name, &team, &trophies, &wins, &attacks, &defenses, &th)
-		return map[string]any{"user_id": id, "display_name": name, "team": team, "trophies": trophies, "wins": wins, "attacks": attacks, "defenses_held": defenses, "townhall": th}, err
-	})
-	if err != nil {
-		failErr(w, err)
-		return
-	}
-	respond(w, 200, map[string]any{"items": out, "scope": map[bool]string{true: "all", false: "team"}[all]})
 }
 
 // burndown: remaining backlog points per day, with scope added/re-estimated/reopened shown apart from completion.
