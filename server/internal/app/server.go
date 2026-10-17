@@ -74,6 +74,8 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/ratings/work", s.workRating)
 		r.Get("/ratings/battle", s.battleRating)
 		r.Get("/burndown", s.burndown)
+		r.Get("/fortress", s.fortress)
+		r.Get("/waves", s.waves)
 
 		r.Get("/city", s.city)
 		r.Post("/city/buildings", s.placeBuilding)

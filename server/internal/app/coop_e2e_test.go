@@ -240,3 +240,37 @@ func TestOverdueDamageOncePerDayAndFloor(t *testing.T) {
 		t.Fatalf("floor 10: %d", hp)
 	}
 }
+
+func TestFortressAPI(t *testing.T) {
+	ts, _, _ := testServer(t)
+	alexey := login(t, ts, "alexey")
+	f := alexey.must(200, "GET", "/fortress", nil, "").Body
+	if num(f["fortress"].(map[string]any)["hp"]) <= 0 {
+		t.Fatalf("hp: %v", f)
+	}
+	enemies := f["enemies"].([]any)
+	if len(enemies) == 0 {
+		t.Fatal("seeded board has enemies")
+	}
+	overdue := false
+	for _, e := range enemies {
+		m := e.(map[string]any)
+		if _, leaked := m["assignee_name"]; leaked {
+			t.Fatal("no names next to enemies")
+		}
+		if m["kind"] == "" || num(m["row"]) < 1 || num(m["row"]) > 4 {
+			t.Fatalf("enemy: %v", m)
+		}
+		if m["number"] == "PLT-10" {
+			overdue = m["overdue"] == true
+		}
+	}
+	if !overdue {
+		t.Fatal("PLT-10 is overdue in the seed")
+	}
+	if num(f["wave"].(map[string]any)["planned"]) == 0 || num(f["fog"]) == 0 {
+		t.Fatalf("plan snapshot and fog exist: %v", f["wave"])
+	}
+	login(t, ts, "admin").refused("not_a_player", "GET", "/fortress", nil)
+	alexey.must(200, "GET", "/waves", nil, "")
+}

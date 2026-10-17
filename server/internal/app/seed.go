@@ -223,7 +223,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		}
 		var due any
 		if st.due != nil {
-			due = now.AddDate(0, 0, *st.due).Format("2006-01-02")
+			due = now.UTC().AddDate(0, 0, *st.due).Format("2006-01-02") // the fortress counts overdue days in UTC
 		} else if st.state == "done" {
 			due = day(st.approvedAgo - 1).Format("2006-01-02")
 			if i%3 == 0 {
