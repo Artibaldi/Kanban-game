@@ -11,9 +11,9 @@ import (
 // Progress replaces the per-person rating: everyone sees their own weeks against their own past,
 // and the team sees its total, its overdue enemies and its waves. Nobody is ranked against a colleague.
 
-// progressWeeks are the Mondays of the last 8 weeks, oldest first.
+// progressWeeks are the Mondays of the last 8 weeks, oldest first, in UTC like the waves.
 func progressWeeks(now time.Time) (first time.Time, weeks []string, index map[string]int) {
-	first = startOfWeek(now).AddDate(0, 0, -7*7)
+	first = startOfWeek(now.UTC()).AddDate(0, 0, -7*7)
 	weeks = make([]string, 8)
 	index = map[string]int{}
 	for i := range weeks {
@@ -26,16 +26,16 @@ func progressWeeks(now time.Time) (first time.Time, weeks []string, index map[st
 // weeklyPoints sums work points by week for one user ("" = the whole team).
 func weeklyPoints(ctx context.Context, q dbtx, teamID, userID string, now time.Time) ([]string, []int64, error) {
 	first, weeks, index := progressWeeks(now)
-	rows, err := q.Query(ctx, `SELECT date_trunc('week', created_at), SUM(points) FROM work_points_events
+	rows, err := q.Query(ctx, `SELECT to_char(date_trunc('week', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD'), SUM(points) FROM work_points_events
  WHERE team_id=$1 AND ($2='' OR user_id::text=$2) AND created_at>=$3 GROUP BY 1`, teamID, userID, first)
 	if err != nil {
 		return nil, nil, err
 	}
 	series := make([]int64, 8)
-	var wk time.Time
+	var wk string
 	var pts int64
 	_, err = pgx.ForEachRow(rows, []any{&wk, &pts}, func() error {
-		if i, ok := index[wk.Format("2006-01-02")]; ok {
+		if i, ok := index[wk]; ok {
 			series[i] += pts
 		}
 		return nil
@@ -53,7 +53,7 @@ func (s *Server) myProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	weeks, series, err := weeklyPoints(ctx, s.db, a.TeamID, a.ID, time.Now())
+	weeks, series, err := weeklyPoints(ctx, s.db, a.TeamID, a.ID, s.now())
 	if err != nil {
 		failErr(w, err)
 		return
@@ -82,7 +82,7 @@ func (s *Server) teamProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	weeks, series, err := weeklyPoints(ctx, s.db, team, "", time.Now())
+	weeks, series, err := weeklyPoints(ctx, s.db, team, "", s.now())
 	if err != nil {
 		failErr(w, err)
 		return

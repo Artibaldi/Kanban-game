@@ -331,3 +331,18 @@ func TestAdminTeamsAndSeed(t *testing.T) {
 		t.Fatalf("seeded fortress: %d", hp)
 	}
 }
+
+func TestLeadCreatedReadyTaskJoinsPlan(t *testing.T) {
+	ts, pool, _ := testServer(t)
+	irina := login(t, ts, "irina")
+	var project string
+	for _, p := range items(irina.must(200, "GET", "/projects", nil, "")) {
+		if p["key"] == "PLT" {
+			project = p["id"].(string)
+		}
+	}
+	created := irina.must(201, "POST", "/tasks", map[string]any{"project_id": project, "title": "Новый враг", "points": 8, "priority": "P2", "state": "ready"}, "").Body
+	if p := planOf(t, pool, "Платформа"); p[created["number"].(string)] != 8 {
+		t.Fatalf("an enemy created by a lead joins the plan at once: %v", p)
+	}
+}

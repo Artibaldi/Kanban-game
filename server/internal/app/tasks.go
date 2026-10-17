@@ -407,6 +407,10 @@ func (s *Server) createTask(w http.ResponseWriter, r *http.Request) {
 		if err = audit(ctx, tx, a.ID, teamID, "task.created", "task", id, t.Number+" «"+t.Title+"»"); err != nil {
 			return 0, nil, err
 		}
+		// A lead's task created in «К выполнению» is an enemy at once.
+		if err = syncWavePlan(ctx, tx, id, s.now()); err != nil {
+			return 0, nil, err
+		}
 		return 201, t, nil
 	})
 }
