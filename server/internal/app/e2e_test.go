@@ -25,7 +25,7 @@ import (
 // The end-to-end test runs the real HTTP API against a throwaway PostgreSQL database created next to DATABASE_URL.
 // It is skipped when DATABASE_URL is not set. Run: DATABASE_URL=postgres://kanban:kanban-local-only@127.0.0.1:15433/kanban?sslmode=disable go test ./...
 
-func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
+func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool, *Server) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		t.Skip("DATABASE_URL is not set")
@@ -69,7 +69,7 @@ func testServer(t *testing.T) (*httptest.Server, *pgxpool.Pool) {
 	tctx, cancel := context.WithCancel(ctx)
 	go s.RunTimers(tctx)
 	t.Cleanup(func() { cancel(); ts.Close() })
-	return ts, pool
+	return ts, pool, s
 }
 
 type client struct {
@@ -192,7 +192,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ts, pool := testServer(t)
+	ts, pool, _ := testServer(t)
 	ctx := context.Background()
 	alexey := login(t, ts, "alexey")
 	irina := login(t, ts, "irina")

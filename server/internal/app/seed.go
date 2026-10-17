@@ -122,8 +122,6 @@ var seedTroops = map[string]map[string]int{
 	"pavel":  {"guard": 10, "raider": 6, "ram": 4},
 }
 
-var seedTrophies = map[string]int{"alexey": 142, "maria": 96, "dmitry": 38, "irina": 71, "sergey": 64, "anna": 88, "pavel": 131}
-
 // Seed fills an empty database. It is a no-op once any user exists.
 func (s *Server) Seed(ctx context.Context) (bool, error) {
 	var n int
@@ -143,6 +141,9 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	for _, name := range []string{"Платформа", "Мобайл"} {
 		var id string
 		if err := tx.QueryRow(ctx, `INSERT INTO teams(name) VALUES($1) RETURNING id::text`, name).Scan(&id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO fortresses(team_id) VALUES($1) ON CONFLICT DO NOTHING`, id); err != nil {
 			return err
 		}
 		teams[name] = id
@@ -175,7 +176,7 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 	// Players and cities first: storage caps apply to the historical rewards below.
 	for login, layout := range seedCities() {
 		u := users[login]
-		if _, err := tx.Exec(ctx, `INSERT INTO players(user_id,trophies) VALUES($1,$2)`, u.ID, seedTrophies[login]); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO players(user_id) VALUES($1)`, u.ID); err != nil {
 			return err
 		}
 		if _, err := applyLedger(ctx, tx, ledgerEntry{UserID: u.ID, Kind: "seed", Gold: 300, Energy: 60, Note: "Стартовый запас города", At: ptrTime(now.AddDate(0, 0, -45))}); err != nil {
