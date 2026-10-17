@@ -164,19 +164,31 @@ func (s *Server) settleNow(ctx context.Context, userID string) error {
 	return s.inTx(ctx, func(tx pgx.Tx) error { return settle(ctx, tx, userID) })
 }
 
-// RunTimers is the server-side clock: it completes due buildings and training every second until ctx ends.
+// RunTimers is the server-side clock: it completes due buildings and training every second, and runs the co-op
+// tick (waves, fortress damage) at start and every 30 seconds, until ctx ends.
 func (s *Server) RunTimers(ctx context.Context) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
+	coop := time.NewTicker(30 * time.Second)
+	defer coop.Stop()
+	s.runCoopTick(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-coop.C:
+			s.runCoopTick(ctx)
 		case <-t.C:
 			if err := s.inTx(ctx, func(tx pgx.Tx) error { return settle(ctx, tx, "") }); err != nil && ctx.Err() == nil {
 				log.Printf("timers: %v", err)
 			}
 		}
+	}
+}
+
+func (s *Server) runCoopTick(ctx context.Context) {
+	if err := s.coopTick(ctx); err != nil && ctx.Err() == nil {
+		log.Printf("co-op: %v", err)
 	}
 }
 

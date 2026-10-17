@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -93,5 +95,148 @@ func TestBacklogTaskJoinsPlanWhenReady(t *testing.T) {
 	irina.must(200, "POST", "/tasks/"+bl["id"].(string)+"/transition", map[string]any{"to": "ready"}, "")
 	if p := planOf(t, pool, "Платформа"); p["PLT-14"] != 8 {
 		t.Fatalf("became an enemy: %v", p)
+	}
+}
+
+// endCurrentWave puts the team's open wave entirely in the past so the next tick settles it.
+func endCurrentWave(t *testing.T, pool *pgxpool.Pool, team string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `UPDATE waves SET starts_at=now()-interval '7 days', ends_at=clock_timestamp()
+ WHERE team_id=(SELECT id FROM teams WHERE name=$1) AND settled_at IS NULL`, team)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// keepOnlyInPlan narrows the open wave's plan to one task, so the crowns are predictable (closing it = 100 %).
+func keepOnlyInPlan(t *testing.T, pool *pgxpool.Pool, team, number string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `DELETE FROM wave_plan wp USING waves w, tasks tk
+ WHERE wp.wave_id=w.id AND tk.id=wp.task_id AND w.settled_at IS NULL AND tk.number<>$2 AND w.team_id=(SELECT id FROM teams WHERE name=$1)`, team, number)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSettleWaveRewardsWholeTeam(t *testing.T) {
+	ts, pool, s := testServer(t)
+	ctx := context.Background()
+	irina, maria := login(t, ts, "irina"), login(t, ts, "maria")
+	maria.must(200, "PATCH", "/me/settings", map[string]any{"game_mode": false}, "") // work mode
+	review := findTask(t, irina, "Импорт платежей из банка")
+	irina.must(200, "POST", "/tasks/"+review["id"].(string)+"/transition", map[string]any{"to": "done"}, "")
+	keepOnlyInPlan(t, pool, "Платформа", "PLT-10")
+	endCurrentWave(t, pool, "Платформа")
+	if err := s.coopTick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var crowns *int
+	var summary string
+	_ = pool.QueryRow(ctx, `SELECT crowns, summary FROM waves WHERE settled_at IS NOT NULL AND team_id=(SELECT id FROM teams WHERE name='Платформа') ORDER BY ends_at DESC LIMIT 1`).Scan(&crowns, &summary)
+	if crowns == nil || *crowns < 1 || !strings.HasPrefix(summary, "Закрыто 5 из 5 баллов.") {
+		t.Fatalf("settled: %v %q", crowns, summary)
+	}
+	var n int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM ledger l JOIN users u ON u.id=l.user_id WHERE l.kind='wave_reward' AND u.login IN ('alexey','maria','dmitry','irina')`).Scan(&n)
+	if n != 4 {
+		t.Fatalf("every member incl. lead and work-mode maria gets the chest: %d", n)
+	}
+	var next int
+	_ = pool.QueryRow(ctx, `SELECT count(*) FROM waves WHERE settled_at IS NULL AND starts_at<=now() AND ends_at>now() AND team_id=(SELECT id FROM teams WHERE name='Платформа')`).Scan(&next)
+	if next != 1 {
+		t.Fatalf("the tick opens the current wave: %d", next)
+	}
+}
+
+func TestSettleWaveTwiceNoDoubleReward(t *testing.T) {
+	ts, pool, s := testServer(t)
+	ctx := context.Background()
+	irina := login(t, ts, "irina")
+	irina.must(200, "POST", "/tasks/"+findTask(t, irina, "Импорт платежей из банка")["id"].(string)+"/transition", map[string]any{"to": "done"}, "")
+	keepOnlyInPlan(t, pool, "Платформа", "PLT-10")
+	endCurrentWave(t, pool, "Платформа")
+	errs := make(chan error, 2)
+	go func() { errs <- s.coopTick(ctx) }()
+	go func() { errs <- s.coopTick(ctx) }()
+	if e1, e2 := <-errs, <-errs; e1 != nil || e2 != nil {
+		t.Fatal(e1, e2)
+	}
+	var n, users int
+	_ = pool.QueryRow(ctx, `SELECT count(*), count(DISTINCT user_id) FROM ledger WHERE kind='wave_reward'`).Scan(&n, &users)
+	if n == 0 || n != users {
+		t.Fatalf("one wave reward per user: %d rows for %d users", n, users)
+	}
+}
+
+func TestReopenedFromPreviousWaveCountsOnce(t *testing.T) {
+	ts, pool, s := testServer(t)
+	ctx := context.Background()
+	irina, maria := login(t, ts, "irina"), login(t, ts, "maria")
+	id := findTask(t, irina, "Импорт платежей из банка")["id"].(string)
+	irina.must(200, "POST", "/tasks/"+id+"/transition", map[string]any{"to": "done"}, "")
+	endCurrentWave(t, pool, "Платформа")
+	if err := s.coopTick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	irina.must(200, "POST", "/tasks/"+id+"/transition", map[string]any{"to": "in_progress", "comment": "Нет теста"}, "")
+	maria.must(200, "POST", "/tasks/"+id+"/transition", map[string]any{"to": "review"}, "")
+	irina.must(200, "POST", "/tasks/"+id+"/transition", map[string]any{"to": "done"}, "")
+	var w waveRow
+	if err := pool.QueryRow(ctx, `SELECT id::text, team_id::text, starts_at, ends_at FROM waves WHERE settled_at IS NULL AND team_id=(SELECT id FROM teams WHERE name='Платформа')`).
+		Scan(&w.ID, &w.TeamID, &w.StartsAt, &w.EndsAt); err != nil {
+		t.Fatal(err)
+	}
+	tally, err := tallyWave(ctx, pool, w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tally.Closed < 5 || tally.Closed > tally.Planned {
+		t.Fatalf("re-approved task counts once: %+v", tally)
+	}
+	var p int
+	_ = pool.QueryRow(ctx, `SELECT points FROM wave_plan WHERE wave_id=$1 AND task_id=$2`, w.ID, id).Scan(&p)
+	if p != 5 {
+		t.Fatalf("re-entered the plan with its points: %d", p)
+	}
+}
+
+func TestOverdueDamageOncePerDayAndFloor(t *testing.T) {
+	_, pool, _ := testServer(t)
+	ctx := context.Background()
+	var team string
+	_ = pool.QueryRow(ctx, `SELECT id::text FROM teams WHERE name='Платформа'`).Scan(&team)
+	_, _ = pool.Exec(ctx, `UPDATE fortresses SET hp=100 WHERE team_id=$1`, team)
+	friday := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	_, _ = pool.Exec(ctx, `UPDATE tasks SET due_date=$1 WHERE number='PLT-10'`, friday.AddDate(0, 0, -3)) // 5 points, review
+	run := func(day time.Time) int {
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback(ctx)
+		d, err := applyOverdueDamage(ctx, tx, team, day)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	if first := run(friday); first < 10 {
+		t.Fatalf("PLT-10 alone deals 10: %d", first)
+	}
+	if again := run(friday); again != 0 {
+		t.Fatalf("same day twice: %d", again)
+	}
+	if sunday := run(friday.AddDate(0, 0, 2)); sunday != 0 {
+		t.Fatalf("no damage on a day off: %d", sunday)
+	}
+	_, _ = pool.Exec(ctx, `UPDATE fortresses SET hp=12 WHERE team_id=$1`, team)
+	run(friday.AddDate(0, 0, 3))
+	var hp int
+	_ = pool.QueryRow(ctx, `SELECT hp FROM fortresses WHERE team_id=$1`, team).Scan(&hp)
+	if hp != 10 {
+		t.Fatalf("floor 10: %d", hp)
 	}
 }
