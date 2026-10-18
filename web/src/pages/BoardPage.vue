@@ -245,7 +245,7 @@ onUnmounted(() => {
 })
 
 // Phone: one column at a time, with stage tabs above.
-const currentStage = ref<TaskState>('ready')
+const currentStage = ref<TaskState>('backlog')
 function goStage(s: TaskState) {
   currentStage.value = s
   boardEl.value?.querySelector<HTMLElement>(`[data-col="${s}"]`)?.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', inline: 'start', block: 'nearest' })

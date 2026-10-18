@@ -50,6 +50,7 @@ const reward = computed(() => cardReward(props.task, game.config?.settings))
 <style scoped>
 .tcard { position: relative; background: var(--fill); color: var(--ink); border-radius: 20px; padding: 14px 14px 14px 16px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; box-shadow: 0 1px 2px rgba(60, 40, 20, 0.08), 0 6px 16px rgba(60, 40, 20, 0.08); transition: transform 0.2s var(--ease-emphasized), box-shadow 0.2s var(--ease-emphasized); }
 .tcard.s-backlog { box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm); }
+.tcard.s-review { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(60, 40, 20, 0.08), 0 6px 16px rgba(60, 40, 20, 0.08); }
 @media (hover: hover) { .tcard:hover { transform: translateY(-3px); box-shadow: 0 2px 4px rgba(60, 40, 20, 0.08), 0 16px 30px rgba(60, 40, 20, 0.16); } }
 .tcard:has(.open:focus-visible) { outline: 3px solid var(--color-focus); outline-offset: 3px; }
 .c-top { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--mute); min-height: 30px; padding-right: 36px; }

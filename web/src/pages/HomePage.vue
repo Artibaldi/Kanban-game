@@ -5,24 +5,26 @@ import Icon from '../ui/Icon.vue'
 import TaskCard from '../components/TaskCard.vue'
 import CityScene from '../components/CityScene.vue'
 import ResourceBar from '../components/ResourceBar.vue'
+import StatRow from '../components/StatRow.vue'
 import { api } from '../api'
-import { ago, dateTime } from '../lib/format'
+import { ago, dateTime, plural } from '../lib/format'
 import { stateName } from '../lib/board'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
+import { useWork } from '../stores/work'
 import type { City, FeedItem, FortressState, MyProgress, Task } from '../types'
 
 const session = useSession()
 const game = useGame()
 const toasts = useToasts()
 const router = useRouter()
+const work = useWork()
 const tasks = ref<Task[]>([])
 const feed = ref<FeedItem[]>([])
 const city = ref<City | null>(null)
 const week = ref<MyProgress | null>(null)
 const fort = ref<FortressState | null>(null)
-const reviewCount = ref(0)
 
 onMounted(async () => {
   try {
@@ -34,7 +36,6 @@ onMounted(async () => {
     tasks.value = t.items
     feed.value = f.items
     week.value = w
-    if (session.isLead) reviewCount.value = (await api.get<{ review: Task[] }>('/review')).review.length
     if (session.gameOn) {
       city.value = await api.get<City>('/city'); game.setPlayer(city.value.player); game.loadConfig()
       fort.value = await api.get<FortressState>('/fortress')
@@ -43,6 +44,14 @@ onMounted(async () => {
 })
 const active = computed(() => tasks.value.filter(t => t.state !== 'done' && t.state !== 'backlog').sort((a, b) => ['in_progress', 'review', 'ready'].indexOf(a.state) - ['in_progress', 'review', 'ready'].indexOf(b.state)))
 const feedIcon = (a: string) => (a.startsWith('wave') ? 'flag' : a.startsWith('battle') ? 'swords' : a.startsWith('building') ? 'hammer' : a.startsWith('army') ? 'shield' : a === 'task.approved' ? 'check' : a === 'task.reopened' ? 'undo' : 'board')
+const statItems = computed(() => [
+  { icon: 'flame', value: active.value.length, label: 'моих задач в работе' },
+  ...(week.value ? [
+    { icon: 'trophy', value: week.value.this_week, label: 'очков за неделю' },
+    { icon: 'chart', value: week.value.best_week, label: 'лучшая неделя' },
+  ] : []),
+  ...(session.isLead ? [{ icon: 'eye', value: work.reviewCount, label: 'ждут вашей проверки' }] : []),
+])
 const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер' })
 </script>
 
@@ -50,14 +59,14 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
   <div class="page">
     <div class="page-head">
       <div>
-        <p class="eyebrow">{{ session.me?.team_name || 'Администрирование' }}</p>
-        <h1>{{ hello }}, {{ session.me?.display_name.split(' ')[0] }}</h1>
+        <h1>{{ hello }},<span class="sub">{{ session.me?.display_name.split(' ')[0] }}</span></h1>
       </div>
       <div class="row">
-        <RouterLink v-if="session.isLead" to="/review" class="btn" :class="{ primary: reviewCount > 0 }"><Icon name="review" :size="16" />На проверке: {{ reviewCount }}</RouterLink>
+        <RouterLink v-if="session.isLead" to="/review" class="btn" :class="{ primary: work.reviewCount > 0 }"><Icon name="review" :size="16" />На проверке: {{ work.reviewCount }}</RouterLink>
         <RouterLink to="/board" class="btn"><Icon name="board" :size="16" />Доска</RouterLink>
       </div>
     </div>
+    <StatRow :items="statItems" class="home-stats" />
 
     <div class="grid">
       <section class="card panel stack main">
@@ -66,11 +75,7 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
         <div class="tasks">
           <TaskCard v-for="t in active.slice(0, 6)" :key="t.id" :task="t" @open="router.push(`/board?task=${t.id}`)" />
         </div>
-        <div v-if="week" class="weekline">
-          <div><span class="big num">{{ week.this_week }}</span><span class="muted small"> баллов за неделю</span></div>
-          <div class="small muted">Лучшая неделя: {{ week.best_week }} · всего {{ week.total }}</div>
-          <RouterLink to="/progress" class="small">Прогресс и график бэклога</RouterLink>
-        </div>
+        <RouterLink v-if="week" to="/progress" class="small weekline">Мой прогресс и график бэклога · всего {{ week.total }} {{ plural(week.total, 'очко', 'очка', 'очков') }}</RouterLink>
       </section>
 
       <section v-if="session.gameOn" class="card city-card game-only">
@@ -106,12 +111,12 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
 <style scoped>
 .grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-areas: "main city" "main feed"; gap: var(--space-4); align-items: start; }
 .main { grid-area: main; }
-.city-card { grid-area: city; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); background: linear-gradient(180deg, var(--art-sky), var(--color-surface) 75%); }
+.city-card { grid-area: city; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); background: linear-gradient(180deg, var(--art-sky), var(--color-surface) 75%); overflow: hidden; }
 .feed { grid-area: feed; }
 body.work-mode .grid, .grid:not(:has(.city-card)) { grid-template-areas: "main feed"; }
 .tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
-.weekline { display: flex; flex-direction: column; gap: 4px; padding-top: var(--space-4); border-top: 1px solid var(--color-border); }
-.big { font-family: var(--font-display); font-size: var(--text-display); font-weight: 700; color: var(--color-action-primary); line-height: 1; }
+.weekline { padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
+.home-stats { margin: 0 0 var(--space-5); }
 .res { flex-wrap: wrap; }
 .fort-line { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
 .scene-link { display: block; max-width: 460px; margin: 0 auto; width: 100%; }
