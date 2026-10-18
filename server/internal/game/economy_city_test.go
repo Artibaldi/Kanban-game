@@ -122,7 +122,7 @@ func TestExchangeNeverOverflows(t *testing.T) {
 	if dg, _, r := Exchange(s, m, "energy", 10); r == nil || r.Code != "storage_full" {
 		t.Fatalf("an absurd payout is refused, not wrapped: %d %v", dg, r)
 	}
-	if r := TradeFits(m, 1<<62, 0, 1<<62, -1); r == nil || r.Code != "storage_full" {
+	if r := TradeFits(m, 1<<62, 10, 1<<62, -1); r == nil || r.Code != "storage_full" {
 		t.Fatalf("no wrap-around past the cap: %v", r)
 	}
 }

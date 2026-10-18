@@ -48,10 +48,10 @@ func Exchange(s Settings, c City, give string, amount int64) (dGold, dEnergy int
 
 // TradeFits: the player has what they give, and what they get fits the storage — nothing is lost to a full store.
 func TradeFits(c City, gold, energy, dGold, dEnergy int64) *Refusal {
-	if gold+dGold < 0 {
+	if dGold < 0 && -dGold > gold {
 		return refuse("insufficient_gold", "Недостаточно золота.")
 	}
-	if energy+dEnergy < 0 {
+	if dEnergy < 0 && -dEnergy > energy {
 		return refuse("insufficient_energy", "Недостаточно энергии.")
 	}
 	capG, capE := c.Caps()
