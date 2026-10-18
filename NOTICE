@@ -1,0 +1,6 @@
+Task Bastion (Бастион задач)
+Copyright 2026 Arti
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+Third-party dependencies are listed in server/go.mod and web/package.json
+and remain under their own licenses.

@@ -105,6 +105,10 @@ func RepairHP(s Settings, hp, crowns int) int {
 // DefenseScore is one member's contribution to the fortress: walls, towers and ready troops.
 func DefenseScore(d Defense, army map[string]int) int64 {
 	score := int64(d.WallHP + d.TowerHP)
+	// Troops lent to a teammate's banner still defend the team's fortress, from their new home.
+	for k, n := range d.Garrison {
+		score += int64(Troops[k].HP * n)
+	}
 	for k, n := range army {
 		score += int64(Troops[k].HP * n)
 	}

@@ -95,8 +95,33 @@ func (s *Server) adminPatchUser(w http.ResponseWriter, r *http.Request) {
 		if id == a.ID && (role != "admin" || !active) {
 			return 0, nil, refuse(409, "self_lockout", "Нельзя снять собственный доступ администратора.")
 		}
+		var oldTeam *string
+		var wasActive bool
+		if err := tx.QueryRow(ctx, `SELECT team_id::text, active FROM users WHERE id=$1`, id).Scan(&oldTeam, &wasActive); err != nil {
+			return 0, nil, err
+		}
+		// Lending moves troops between camps: lock the user and everyone they lend to or borrow from first,
+		// in the same order as the banner paths, and only then change the user's row.
+		if oldTeam != nil {
+			if err := lockTeamLending(ctx, tx, *oldTeam); err != nil {
+				return 0, nil, err
+			}
+		}
+		if err := lockLending(ctx, tx, id, false); err != nil {
+			return 0, nil, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE users SET role=$2, team_id=$3, active=$4 WHERE id=$1`, id, role, team, active); err != nil {
 			return 0, nil, err
+		}
+		// Leaving the team or being switched off closes the user's challenges: nobody fights a former colleague.
+		if (wasActive && !active) || (oldTeam == nil) != (team == nil) || (oldTeam != nil && team != nil && *oldTeam != *team) {
+			if err := closeChallengesOf(ctx, tx, id); err != nil {
+				return 0, nil, err
+			}
+			// Troops lent by or to them go home.
+			if err := returnReinforcements(ctx, tx, id, false); err != nil {
+				return 0, nil, err
+			}
 		}
 		if team != nil {
 			if err := ensurePlayer(ctx, tx, id); err != nil {
@@ -120,7 +145,7 @@ func ensurePlayer(ctx context.Context, tx pgx.Tx, userID string) error {
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,'townhall',1,$2,$2)`, userID, game.GridSize/2-1); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,'townhall',1,$2,$2)`, userID, game.MaxGrid/2-1); err != nil {
 		return err
 	}
 	_, err = applyLedger(ctx, tx, ledgerEntry{UserID: userID, Kind: "seed", Gold: st.StartGold, Energy: st.StartEnergy, Note: "Стартовый запас города"})

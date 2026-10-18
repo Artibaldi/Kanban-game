@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	GridSize    = 12
+	// MaxGrid is the whole island; the land a player can build on grows from its centre with the town hall.
+	MaxGrid     = 16
 	MaxBuilders = 2
 	// Base caps provided by the town hall itself, before any storage.
 	BaseGoldCap   = 600
@@ -26,7 +27,12 @@ type LevelSpec struct {
 	DPS           int   `json:"dps,omitempty"`        // tower damage per round
 	Capacity      int   `json:"capacity,omitempty"`   // barracks housing
 	GoldCap       int64 `json:"gold_cap,omitempty"`   // storage
-	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage
+	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage, crystal well
+	FeePct        int   `json:"fee_pct,omitempty"`    // market: the share kept on every exchange
+	Builders      int   `json:"builders,omitempty"`   // builder hut
+	Splash        int   `json:"splash,omitempty"`     // mortar: damage per unit hit by a shell
+	TrapDmg       int   `json:"trap_dmg,omitempty"`   // trap: damage when it springs
+	Garrison      int   `json:"garrison,omitempty"`   // team banner: places for colleagues' troops
 }
 
 type BuildingDef struct {
@@ -37,6 +43,10 @@ type BuildingDef struct {
 	MaxCount []int       `json:"max_count"`
 	Levels   []LevelSpec `json:"levels"`
 	Defense  bool        `json:"defense"`
+	// Decor: looks only — instant, no builder, no hit points, never part of a defence.
+	Decor bool `json:"decor,omitempty"`
+	// Reward: what the team must achieve in waves to unlock this decor (free, for every member).
+	Reward string `json:"reward,omitempty"`
 }
 
 func (d BuildingDef) MaxLevel() int { return len(d.Levels) }
@@ -60,6 +70,29 @@ func (d BuildingDef) Allowed(thLevel int) int {
 	return d.MaxCount[thLevel-1]
 }
 
+// BuildingOrder is the order buildings are offered in the city.
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "archery", "workshop", "mortar", "trap", "stable", "crossbow", "banner", "road", "tree", "flowers", "lantern", "pond", "flags", "arch", "fountain", "statue"}
+
+// Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
+// 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
+func Land(townHall int) (start, size int) {
+	switch {
+	case townHall >= 4:
+		size = 16
+	case townHall == 3:
+		size = 14
+	default:
+		size = 12
+	}
+	return (MaxGrid - size) / 2, size
+}
+
+// InLand: the cell is on the player's land.
+func InLand(townHall, x, y int) bool {
+	start, size := Land(townHall)
+	return x >= start && y >= start && x < start+size && y < start+size
+}
+
 var Buildings = map[string]BuildingDef{
 	"townhall": {
 		Type: "townhall", Name: "Ратуша", Description: "Сердце города. Её уровень открывает новые здания и уровни.",
@@ -70,11 +103,13 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 1000, Seconds: 45, RequiresTH: 2, RequiresLevel: 3, HP: 1800},
 			{Level: 4, Cost: 2000, Seconds: 60, RequiresTH: 3, RequiresLevel: 5, HP: 2400},
 			{Level: 5, Cost: 3500, Seconds: 90, RequiresTH: 4, RequiresLevel: 7, HP: 3100},
+			{Level: 6, Cost: 5000, Seconds: 120, RequiresTH: 5, RequiresLevel: 9, HP: 3900},
+			{Level: 7, Cost: 7000, Seconds: 150, RequiresTH: 6, RequiresLevel: 11, HP: 4800},
 		},
 	},
 	"barracks": {
 		Type: "barracks", Name: "Казарма", Description: "Готовит войска. Уровень увеличивает численность армии.",
-		MaxCount: []int{1, 1, 2, 2, 3},
+		MaxCount: []int{1, 1, 2, 2, 3, 3, 4},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 150, Seconds: 10, RequiresTH: 1, HP: 400, Capacity: 10},
 			{Level: 2, Cost: 400, Seconds: 20, RequiresTH: 2, HP: 550, Capacity: 18},
@@ -94,7 +129,7 @@ var Buildings = map[string]BuildingDef{
 	},
 	"wall": {
 		Type: "wall", Name: "Стена", Description: "Сегмент укреплений: войска сначала пробивают стены.", Defense: true,
-		MaxCount: []int{4, 8, 12, 16, 20},
+		MaxCount: []int{4, 8, 12, 16, 20, 24, 28},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 25, Seconds: 3, RequiresTH: 1, HP: 120},
 			{Level: 2, Cost: 70, Seconds: 5, RequiresTH: 2, HP: 220},
@@ -103,9 +138,115 @@ var Buildings = map[string]BuildingDef{
 			{Level: 5, Cost: 550, Seconds: 15, RequiresTH: 5, HP: 780},
 		},
 	},
+	"tavern": {
+		Type: "tavern", Name: "Таверна", Description: "Здесь бросают и принимают вызовы на дружеский бой. Уровень добавляет дружеские бои в день.",
+		MaxCount: []int{1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 100, Seconds: 8, RequiresTH: 1, HP: 300},
+			{Level: 2, Cost: 300, Seconds: 15, RequiresTH: 2, HP: 420},
+			{Level: 3, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 560},
+		},
+	},
+	// Economy: none of these earns anything by itself — gold and energy still come only from work and wave chests.
+	"hut": {
+		Type: "hut", Name: "Хижина строителя", Description: "Здесь живёт ещё один строитель: можно вести на одну стройку больше.",
+		MaxCount: []int{0, 0, 1, 1, 2},
+		Levels:   []LevelSpec{{Level: 1, Cost: 600, Seconds: 25, RequiresTH: 3, HP: 300, Builders: 1}},
+	},
+	"market": {
+		Type: "market", Name: "Рынок", Description: "Обмен золота на энергию и обратно. Рынок берёт комиссию, уровень её снижает.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 300, Seconds: 15, RequiresTH: 2, HP: 400, FeePct: 30},
+			{Level: 2, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 550, FeePct: 20},
+			{Level: 3, Cost: 1400, Seconds: 40, RequiresTH: 4, HP: 700, FeePct: 10},
+		},
+	},
+	"well": {
+		Type: "well", Name: "Кристальный колодец", Description: "Отдельный запас энергии: хранит её, но не добывает.",
+		MaxCount: []int{0, 1, 1, 2, 2},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 200, Seconds: 12, RequiresTH: 2, HP: 300, EnergyCap: 250},
+			{Level: 2, Cost: 500, Seconds: 25, RequiresTH: 3, HP: 420, EnergyCap: 500},
+			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 560, EnergyCap: 900},
+		},
+	},
+	// Army and defence.
+	"archery": {
+		Type: "archery", Name: "Стрельбище", Description: "Здесь учат лучников: они стреляют через стены, но хрупки.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 250, Seconds: 15, RequiresTH: 2, HP: 380},
+			{Level: 2, Cost: 600, Seconds: 25, RequiresTH: 3, HP: 520},
+			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 680},
+		},
+	},
+	"workshop": {
+		Type: "workshop", Name: "Мастерская", Description: "Улучшает войска: каждый уровень отряда даёт +10% здоровья и атаки. Уровень мастерской открывает следующий уровень войск.",
+		MaxCount: []int{0, 0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 800, Seconds: 30, RequiresTH: 3, HP: 500},
+			{Level: 2, Cost: 1500, Seconds: 45, RequiresTH: 4, HP: 650},
+			{Level: 3, Cost: 2500, Seconds: 60, RequiresTH: 5, HP: 800},
+		},
+	},
+	"mortar": {
+		Type: "mortar", Name: "Мортира", Description: "Бьёт по площади: каждый снаряд задевает до шести бойцов. Сильна против толпы.", Defense: true,
+		MaxCount: []int{0, 0, 1, 1, 2, 2, 3},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 700, Seconds: 30, RequiresTH: 3, HP: 450, Splash: 6},
+			{Level: 2, Cost: 1200, Seconds: 45, RequiresTH: 4, HP: 600, Splash: 9},
+			{Level: 3, Cost: 2000, Seconds: 60, RequiresTH: 5, HP: 780, Splash: 13},
+		},
+	},
+	"trap": {
+		Type: "trap", Name: "Ловушка", Description: "Срабатывает один раз в начале боя. Соперник не видит ловушки, пока не нападёт.", Defense: true,
+		MaxCount: []int{0, 2, 3, 4, 5, 6, 7},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 60, Seconds: 5, RequiresTH: 2, HP: 0, TrapDmg: 60},
+			{Level: 2, Cost: 200, Seconds: 10, RequiresTH: 3, HP: 0, TrapDmg: 110},
+		},
+	},
+	"stable": {
+		Type: "stable", Name: "Конюшня", Description: "Готовит всадников: они объезжают стены и первыми бьют по башням.",
+		MaxCount: []int{0, 0, 0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 900, Seconds: 35, RequiresTH: 4, HP: 600},
+			{Level: 2, Cost: 1600, Seconds: 50, RequiresTH: 5, HP: 780},
+		},
+	},
+	"crossbow": {
+		Type: "crossbow", Name: "Арбалетная башня", Description: "Дальнобойная: болты летят прежде всего в тараны и всадников.", Defense: true,
+		MaxCount: []int{0, 0, 0, 1, 1, 2, 3},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 1500, Seconds: 45, RequiresTH: 4, HP: 650, DPS: 40},
+			{Level: 2, Cost: 2400, Seconds: 60, RequiresTH: 5, HP: 850, DPS: 55},
+			{Level: 3, Cost: 3500, Seconds: 80, RequiresTH: 6, HP: 1050, DPS: 72},
+		},
+	},
+	"banner": {
+		Type: "banner", Name: "Знамя команды", Description: "Сюда коллеги присылают свои войска: они защищают город в дружеских боях и не гибнут. Отпустить их можно в любой момент.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 300, Seconds: 20, RequiresTH: 2, HP: 400, Garrison: 6},
+			{Level: 2, Cost: 700, Seconds: 35, RequiresTH: 3, HP: 550, Garrison: 12},
+			{Level: 3, Cost: 1300, Seconds: 50, RequiresTH: 4, HP: 700, Garrison: 20},
+		},
+	},
+	// Wave rewards: free decor the whole team unlocks together.
+	"flags":    reward("flags", "Флаги команды", "Флаги в цветах команды.", "Команда отбила волну хотя бы с одной короной.", []int{2, 2, 3, 3, 4}),
+	"arch":     reward("arch", "Триумфальная арка", "Арка над дорогой в честь большой победы.", "Команда отбила волну на три короны.", []int{1}),
+	"fountain": reward("fountain", "Фонтан", "Фонтан на площади.", "Три волны подряд на две короны и больше.", []int{1}),
+	"statue":   reward("statue", "Статуя защитника", "Каменный защитник на постаменте.", "Три волны на три короны.", []int{1}),
+	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.
+	"road":    decor("road", "Дорога", "Мостовая между зданиями. Укладывается цепочкой.", 5, []int{40, 60, 80, 100, 120}),
+	"tree":    decor("tree", "Дерево", "Тень и зелень во дворе.", 15, []int{6, 10, 14, 18, 22}),
+	"flowers": decor("flowers", "Клумба", "Цветы у дорожек.", 10, []int{6, 10, 14, 18, 22}),
+	"lantern": decor("lantern", "Фонарь", "Свет на улицах города.", 20, []int{4, 6, 8, 10, 12}),
+	"pond":    decor("pond", "Пруд", "Вода с кувшинками.", 40, []int{1, 1, 2, 2, 3}),
 	"tower": {
 		Type: "tower", Name: "Башня", Description: "Стреляет по атакующим каждый раунд боя.", Defense: true,
-		MaxCount: []int{1, 2, 3, 4, 5},
+		MaxCount: []int{1, 2, 3, 4, 5, 6, 6},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 200, Seconds: 10, RequiresTH: 1, HP: 300, DPS: 14},
 			{Level: 2, Cost: 500, Seconds: 20, RequiresTH: 2, HP: 430, DPS: 22},
@@ -156,6 +297,17 @@ func (c City) Count(kind string) int {
 	return n
 }
 
+// Builders: the two the town hall provides plus one for every finished builder hut.
+func (c City) Builders() int {
+	n := MaxBuilders
+	for _, b := range c.Buildings {
+		if spec, ok := Buildings[b.Type].Spec(b.Level); ok {
+			n += spec.Builders
+		}
+	}
+	return n
+}
+
 func (c City) BuildersBusy() int {
 	n := 0
 	for _, b := range c.Buildings {
@@ -175,14 +327,14 @@ func (c City) Occupied(x, y int) bool {
 	return false
 }
 
-// Caps are the storage limits: town hall base plus every completed storage level.
+// Caps are the storage limits: town hall base plus every completed storage and crystal well level.
 func (c City) Caps() (gold, energy int64) {
 	gold, energy = BaseGoldCap, BaseEnergyCap
 	for _, b := range c.Buildings {
-		if b.Type != "storage" {
+		if b.Type != "storage" && b.Type != "well" {
 			continue
 		}
-		if spec, ok := Buildings["storage"].Spec(b.Level); ok {
+		if spec, ok := Buildings[b.Type].Spec(b.Level); ok {
 			gold += spec.GoldCap
 			energy += spec.EnergyCap
 		}
@@ -220,8 +372,8 @@ func CheckPlace(c City, kind string, x, y int, gold int64) (LevelSpec, *Refusal)
 	if !ok || kind == "townhall" {
 		return LevelSpec{}, refuse("invalid_building", "Такое здание построить нельзя.")
 	}
-	if x < 0 || y < 0 || x >= GridSize || y >= GridSize {
-		return LevelSpec{}, refuse("invalid_cell", "Клетка за пределами поля.")
+	if !InLand(c.TownHall(), x, y) {
+		return LevelSpec{}, refuse("invalid_cell", "Клетка за пределами вашей земли. Земля растёт с уровнем ратуши.")
 	}
 	if c.Occupied(x, y) {
 		return LevelSpec{}, refuse("cell_occupied", "Клетка уже занята.")
@@ -234,7 +386,7 @@ func CheckPlace(c City, kind string, x, y int, gold int64) (LevelSpec, *Refusal)
 	if c.Count(kind) >= def.Allowed(th) {
 		return LevelSpec{}, refuse("building_limit", "Достигнут лимит таких зданий для текущего уровня ратуши.")
 	}
-	if c.BuildersBusy() >= MaxBuilders {
+	if !def.Decor && c.BuildersBusy() >= c.Builders() {
 		return LevelSpec{}, refuse("builders_busy", "Все строители заняты. Дождитесь окончания стройки.")
 	}
 	if gold < spec.Cost {
@@ -260,11 +412,46 @@ func CheckUpgrade(c City, b Building, gold int64, playerLevel int) (LevelSpec, *
 	if playerLevel < spec.RequiresLevel {
 		return LevelSpec{}, refuse("player_level", fmt.Sprintf("Нужен уровень игрока %d. Опыт дают подтверждённые задачи.", spec.RequiresLevel))
 	}
-	if c.BuildersBusy() >= MaxBuilders {
+	if c.BuildersBusy() >= c.Builders() {
 		return LevelSpec{}, refuse("builders_busy", "Все строители заняты. Дождитесь окончания стройки.")
 	}
 	if gold < spec.Cost {
 		return LevelSpec{}, refuse("insufficient_gold", "Недостаточно золота.")
 	}
 	return spec, nil
+}
+
+// CheckMove validates moving building b to (x, y): free and instant, anywhere on the player's land.
+func CheckMove(c City, b Building, x, y int) *Refusal {
+	if b.X == x && b.Y == y {
+		return refuse("same_cell", "Здание уже стоит здесь.")
+	}
+	if !InLand(c.TownHall(), x, y) {
+		return refuse("invalid_cell", "Клетка за пределами вашей земли. Земля растёт с уровнем ратуши.")
+	}
+	if c.Occupied(x, y) {
+		return refuse("cell_occupied", "Клетка уже занята.")
+	}
+	return nil
+}
+
+func reward(kind, name, description, why string, maxCount []int) BuildingDef {
+	d := decor(kind, name, description, 0, maxCount)
+	d.Reward = why
+	return d
+}
+
+func decor(kind, name, description string, cost int64, maxCount []int) BuildingDef {
+	return BuildingDef{Type: kind, Name: name, Description: description, Decor: true, MaxCount: maxCount,
+		Levels: []LevelSpec{{Level: 1, Cost: cost, Seconds: 0, RequiresTH: 1, HP: 0}}}
+}
+
+// Find returns the building with the given id.
+func (c City) Find(id string) (Building, bool) {
+	for _, b := range c.Buildings {
+		if b.ID == id {
+			return b, true
+		}
+	}
+	return Building{}, false
 }

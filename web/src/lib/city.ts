@@ -1,13 +1,15 @@
 // Client mirror of the server's building rules, used only to explain why a button is disabled.
-import type { BuildingDef, CityBuilding, City, Player } from '../types'
+import type { BuildingDef, CityBuilding, City, Defense, Player } from '../types'
 
 export function placeBlock(def: BuildingDef, city: City, player: Player, builders: number): string {
   const spec = def.levels[0]
   if (player.debt) return 'Сначала погасите долг следующими наградами.'
+  if (def.reward && !city.rewards?.[def.type]) return `Награда команды: ${def.reward}`
   if (city.townhall < spec.requires_th) return `Нужна ратуша ${spec.requires_th} уровня.`
   const lim = city.limits[def.type]
   if (lim && lim.built >= lim.allowed) return `Лимит для ратуши ${city.townhall}: ${lim.allowed}. Улучшите ратушу.`
-  if (player.builders_busy >= builders) return 'Все строители заняты.'
+  // Decor is placed at once and needs no builder.
+  if (!def.decor && player.builders_busy >= builders) return 'Все строители заняты.'
   if (player.gold < spec.cost) return `Не хватает ${spec.cost - player.gold} золота.`
   return ''
 }
@@ -23,12 +25,29 @@ export function upgradeBlock(b: CityBuilding, city: City, player: Player, builde
   return ''
 }
 
-export function specLines(type: string, s: { hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number }) {
-  const out = [`Прочность ${s.hp}`]
+export function specLines(type: string, s: { hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number; garrison?: number }) {
+  const out = s.hp ? [`Прочность ${s.hp}`] : []
   if (s.dps) out.push(`Урон ${s.dps} за залп`)
   if (s.capacity) out.push(`Мест в армии ${s.capacity}`)
   if (s.gold_cap) out.push(`+${s.gold_cap} к запасу золота`)
   if (s.energy_cap) out.push(`+${s.energy_cap} к запасу энергии`)
+  if (s.splash) out.push(`Урон по площади ${s.splash} каждому, до 6 бойцов`)
+  if (s.trap_dmg) out.push(`Урон при срабатывании ${s.trap_dmg}`)
+  if (s.garrison) out.push(`Мест для подкреплений ${s.garrison}`)
+  if (s.fee_pct) out.push(`Комиссия обмена ${s.fee_pct}%`)
+  if (s.builders) out.push(`+${s.builders} строитель`)
   if (type === 'townhall') out.push('Открывает здания и уровни')
   return out
+}
+
+/** defenseLine: a city's defences in one line; traps appear only where the server shows them (after a battle). */
+export function defenseLine(d: Defense): string {
+  const out = [`башни ${d.towers}`]
+  if (d.mortars) out.push(`мортиры ${d.mortars}`)
+  if (d.crossbows) out.push(`арбалеты ${d.crossbows}`)
+  out.push(`стены ${d.walls}`)
+  if (d.traps) out.push(`ловушки ${d.traps}`)
+  const lent = Object.values(d.garrison || {}).reduce((a, b) => a + b, 0)
+  if (lent) out.push(`подкрепления ${lent}`)
+  return out.join(' · ')
 }

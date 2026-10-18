@@ -5,8 +5,8 @@ import type { BuildingType, CityBuilding } from '../types'
 
 const props = withDefaults(defineProps<{
   buildings: CityBuilding[]; grid?: number; selectedId?: string | null; placing?: BuildingType | null
-  now?: number; ruined?: BuildingType[]; showLevels?: boolean; label?: string; compact?: boolean
-}>(), { grid: 12, selectedId: null, placing: null, now: 0, ruined: () => [], showLevels: true, label: 'Город' })
+  now?: number; ruined?: BuildingType[]; showLevels?: boolean; label?: string; compact?: boolean; land?: { start: number; size: number }
+}>(), { grid: 16, selectedId: null, placing: null, now: 0, ruined: () => [], showLevels: true, label: 'Город' })
 const emit = defineEmits<{ select: [b: CityBuilding]; cell: [x: number, y: number] }>()
 
 const TW = 32, TH = 16
@@ -16,7 +16,9 @@ const tiles = computed(() => {
   const used = new Set(props.buildings.map(b => `${b.x},${b.y}`))
   for (let y = 0; y < props.grid; y++) for (let x = 0; x < props.grid; x++) {
     const { sx, sy } = pos(x, y)
-    out.push({ x, y, alt: (x + y) % 2 === 0, free: !used.has(`${x},${y}`), d: `${sx},${sy - TH} ${sx + TW},${sy} ${sx},${sy + TH} ${sx - TW},${sy}` })
+    // Off-land cells are never free to build on.
+    const onLand = !props.land || (x >= props.land.start && y >= props.land.start && x < props.land.start + props.land.size && y < props.land.start + props.land.size)
+    out.push({ x, y, alt: (x + y) % 2 === 0, free: onLand && !used.has(`${x},${y}`), d: `${sx},${sy - TH} ${sx + TW},${sy} ${sx},${sy + TH} ${sx - TW},${sy}` })
   }
   return out
 })

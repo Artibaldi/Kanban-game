@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.woff2 binary
+
+package-lock.json -diff linguist-generated
+go.sum -diff linguist-generated
+docs/superpowers/** linguist-documentation

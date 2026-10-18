@@ -1,0 +1,30 @@
+name: Предложение
+description: Идея для доски или для игры
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую проблему это решает?
+      description: Для кого и в какой момент работы или игры.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Что предлагаете?
+    validations:
+      required: true
+  - type: checkboxes
+    id: principles
+    attributes:
+      label: Принципы проекта
+      options:
+        - label: Не превращает игру в рейтинг сотрудников и не влияет на оценку работы
+          required: true
+        - label: Работает и в режиме «Работа», или полностью скрывается в нём
+          required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы

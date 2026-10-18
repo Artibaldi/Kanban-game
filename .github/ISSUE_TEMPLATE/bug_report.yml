@@ -1,0 +1,54 @@
+name: Ошибка
+description: Что-то работает не так, как описано в README
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за сообщение! **Проблемы безопасности** сюда не пишите — см. SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      description: Хеш коммита (`git rev-parse --short HEAD`)
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Где
+      options:
+        - Доска и задачи
+        - Проверка и награды
+        - Город
+        - Казарма и войска
+        - Крепость и волны
+        - Дружеские бои
+        - Прогресс
+        - Админка
+        - Запуск и сборка
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Что произошло и что ожидалось?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Как повторить
+      description: Демо-пользователь и шаги. Например, «alexey → Доска → …».
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Журнал сервера или консоль браузера
+      render: shell
+  - type: input
+    id: env
+    attributes:
+      label: Окружение
+      description: ОС, браузер, версии Go и Node

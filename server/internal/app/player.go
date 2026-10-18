@@ -35,7 +35,7 @@ func playerState(ctx context.Context, q dbtx, userID string) (map[string]any, er
 	return map[string]any{
 		"gold": b.Gold, "energy": b.Energy, "xp": b.XP, "gold_cap": capG, "energy_cap": capE,
 		"level": level, "level_xp": into, "level_need": need, "trophies": b.Trophies,
-		"debt": b.Gold < 0 || b.Energy < 0, "townhall": c.TownHall(), "builders_busy": c.BuildersBusy(), "builders": game.MaxBuilders,
+		"debt": b.Gold < 0 || b.Energy < 0, "townhall": c.TownHall(), "builders_busy": c.BuildersBusy(), "builders": c.Builders(),
 		"army_capacity": c.ArmyCapacity(), "army_housing": housing, "army_queued": queued,
 	}, nil
 }

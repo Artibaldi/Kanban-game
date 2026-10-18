@@ -39,7 +39,8 @@ const art = computed(() => {
   const stone = props.ruined ? [v('ruin'), v('ruin'), v('ruin')] : [v('stone-light'), v('stone'), v('stone-dark')]
   switch (props.type) {
     case 'townhall': {
-      const w = 22 + L * 1.6, h = 16 + L * 4
+      // Town halls 6–7 keep the citadel's size in the flat view; the 3D model shows their extras.
+      const w = 22 + Math.min(5, L) * 1.6, h = 16 + Math.min(5, L) * 4
       shapes.push(...prism(cx, cy, w, h, stone[0], stone[1], stone[2]))
       let base = cy - h, ww = w
       if (L >= 3) {
@@ -63,6 +64,36 @@ const art = computed(() => {
       if (!props.ruined) shapes.push(...roof(cx, cy, w, h, 11 + L, v('roof-barracks'), v('roof-barracks-dark')))
       topY = cy - h - 11 - L
       extra.push({ kind: 'spears', x: cx + w * 0.5, y: cy - h * 0.2 })
+      break
+    }
+    case 'hut': shapes.push(...prism(cx, cy, 16, 12, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 16, 12, 10, v('gold'), v('gold-dark'))); topY = cy - 34; break
+    case 'market': shapes.push(...prism(cx, cy, 20, 9, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 20, 9, 7, '#e05a4a', '#b23a2e')); topY = cy - 34; break
+    case 'well': shapes.push(...prism(cx, cy, 18, 7, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 7, 6, 16, '#c4b2ff', '#9c84ff', '#7a5cff')); topY = cy - 26; break
+    case 'archery': shapes.push(...prism(cx, cy, 22, 3, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx - 6, cy - 3, 4, 12, '#f2e3b0', '#e2b65a', '#c9973d'), ...prism(cx + 7, cy - 3, 4, 12, '#f2e3b0', '#e2b65a', '#c9973d')); topY = cy - 22; break
+    case 'workshop': shapes.push(...prism(cx, cy, 20, 13, v('stone-light'), v('stone'), v('stone-dark')), ...roof(cx, cy, 20, 13, 9, '#9aa6ba', '#7d8ba3')); topY = cy - 34; break
+    case 'mortar': shapes.push(...prism(cx, cy, 18, 8, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 8, 7, 12, '#5a5e6a', '#4a4e5a', '#3c3f48')); topY = cy - 26; break
+    case 'trap': shapes.push(...prism(cx, cy, 16, 2, v('wood-light'), v('wood'), v('wood-dark'))); topY = cy - 4; break
+    case 'stable': shapes.push(...prism(cx, cy, 24, 10, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 24, 10, 8, v('gold'), v('gold-dark'))); topY = cy - 30; break
+    case 'crossbow': shapes.push(...prism(cx, cy, 13, 30, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 30, 16, 3, '#9aa6ba', '#7d8ba3', '#5d6b83')); topY = cy - 42; break
+    case 'banner': shapes.push(...prism(cx, cy, 12, 4, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 4, 2, 34, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx + 8, cy - 30, 14, 9, '#5aa2ff', '#3e8ef0', '#2c5fa8')); topY = cy - 42; break
+    case 'flags': shapes.push(...prism(cx - 6, cy, 2, 24, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx + 6, cy, 2, 24, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx - 2, cy - 18, 7, 5, '#5aa2ff', '#3e8ef0', '#2c5fa8'), ...prism(cx + 10, cy - 18, 7, 5, '#ffe27a', '#ffd34a', '#e6b02a')); topY = cy - 28; break
+    case 'arch': shapes.push(...prism(cx - 8, cy, 5, 22, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx + 8, cy, 5, 22, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 22, 22, 5, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 30; break
+    case 'fountain': shapes.push(...prism(cx, cy, 20, 5, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 5, 4, 12, '#9fe0ff', '#7fd0ff', '#4db4f0')); topY = cy - 20; break
+    case 'statue': shapes.push(...prism(cx, cy, 12, 8, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 8, 6, 16, '#f2eee4', '#e6e0d2', '#cfc8b8')); topY = cy - 28; break
+    // Decor in the flat view: small and simple.
+    case 'road': shapes.push(...prism(cx, cy, 26, 2, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 4; break
+    case 'pond': shapes.push(...prism(cx, cy, 24, 3, '#4db4f0', v('stone'), v('stone-dark'))); topY = cy - 5; break
+    case 'flowers': shapes.push(...prism(cx, cy, 18, 5, '#ff8ac0', v('soil'), v('wood-dark'))); topY = cy - 7; break
+    case 'tree': shapes.push(...prism(cx, cy, 4, 12, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 14, 12, 26, v('grass-1'), v('grass-edge'))); topY = cy - 38; break
+    case 'lantern': shapes.push(...prism(cx, cy, 3, 26, '#6b6b78', '#4a4a58', '#3a3a46'), ...prism(cx, cy - 26, 6, 7, '#ffe08a', '#ffd34a', '#e6b02a')); topY = cy - 34; break
+    case 'tavern': {
+      const w = 19 + L * 1.4, h = 11 + L * 2.5
+      const wood = props.ruined ? stone : [v('wood-light'), v('wood'), v('wood-dark')]
+      shapes.push(...prism(cx, cy, w, h, wood[0], wood[1], wood[2]))
+      if (!props.ruined) shapes.push(...roof(cx, cy, w, h, 10 + L, v('gold'), v('gold-dark')))
+      topY = cy - h - 10 - L
+      extra.push({ kind: 'barrel', x: cx - w - 3, y: cy + 4 })
+      if (L >= 2) extra.push({ kind: 'flag', x: cx, y: topY })
       break
     }
     case 'storage': {

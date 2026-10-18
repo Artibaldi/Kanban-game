@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="t d">
+  <title id="t">Task Bastion</title>
+  <desc id="d">A kanban board for real work and a city the whole team defends against the backlog.</desc>
+  <style>
+    .bg { fill: #f6f1e7; }
+    .ink { fill: #2a2118; }
+    .muted { fill: #6b5a45; }
+    .stone { fill: #c9b79a; }
+    .stone-dark { fill: #a8916e; }
+    .gold { fill: #d4a23a; }
+    .card { fill: #ffffff; stroke: #e2d6c2; }
+    .col { fill: #ece3d3; }
+    .enemy { fill: #b5483a; }
+    .done { fill: #4f8a4b; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #17140f; }
+      .ink { fill: #f3ead9; }
+      .muted { fill: #b8a78c; }
+      .stone { fill: #5c5040; }
+      .stone-dark { fill: #463c30; }
+      .card { fill: #262019; stroke: #3a3126; }
+      .col { fill: #201b15; }
+    }
+    text { font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; }
+  </style>
+
+  <rect class="bg" width="1200" height="360" rx="20"/>
+
+  <!-- Title -->
+  <text class="ink" x="64" y="130" font-size="60" font-weight="800">Task Bastion</text>
+  <text class="muted" x="66" y="172" font-size="24">Бастион задач</text>
+  <text class="ink" x="66" y="232" font-size="26" font-weight="600">Kanban for real work.</text>
+  <text class="ink" x="66" y="268" font-size="26" font-weight="600">A city the whole team defends.</text>
+  <text class="muted" x="66" y="312" font-size="17">Finish tasks · earn gold · build · beat the backlog together</text>
+
+  <!-- Kanban columns -->
+  <g transform="translate(640 54)">
+    <rect class="col" width="110" height="250" rx="12"/>
+    <rect class="col" x="124" width="110" height="250" rx="12"/>
+    <rect class="col" x="248" width="110" height="250" rx="12"/>
+    <rect class="card" x="10" y="14" width="90" height="44" rx="8"/>
+    <rect class="enemy" x="20" y="26" width="34" height="6" rx="3"/>
+    <rect class="card" x="10" y="68" width="90" height="44" rx="8"/>
+    <rect class="enemy" x="20" y="80" width="50" height="6" rx="3"/>
+    <rect class="card" x="134" y="14" width="90" height="44" rx="8"/>
+    <rect class="gold" x="144" y="26" width="42" height="6" rx="3"/>
+    <rect class="card" x="258" y="14" width="90" height="44" rx="8"/>
+    <rect class="done" x="268" y="26" width="56" height="6" rx="3"/>
+    <rect class="card" x="258" y="68" width="90" height="44" rx="8"/>
+    <rect class="done" x="268" y="80" width="38" height="6" rx="3"/>
+  </g>
+
+  <!-- Fortress -->
+  <g transform="translate(1012 92)">
+    <rect class="stone-dark" x="0" y="80" width="140" height="132" rx="4"/>
+    <rect class="stone" x="34" y="20" width="72" height="192" rx="4"/>
+    <g class="stone">
+      <rect x="0" y="66" width="20" height="18"/><rect x="40" y="66" width="20" height="18"/>
+      <rect x="80" y="66" width="20" height="18"/><rect x="120" y="66" width="20" height="18"/>
+      <rect x="34" y="6" width="16" height="18"/><rect x="62" y="6" width="16" height="18"/><rect x="90" y="6" width="16" height="18"/>
+    </g>
+    <path class="ink" d="M58 212v-38a12 12 0 0 1 24 0v38z"/>
+    <rect class="ink" x="69" y="-40" width="3" height="48"/>
+    <path class="gold" d="M72 -40h40l-10 12 10 12h-40z"/>
+  </g>
+</svg>

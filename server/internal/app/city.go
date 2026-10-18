@@ -18,7 +18,7 @@ func (s *Server) gameConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defs := []game.BuildingDef{}
-	for _, k := range []string{"townhall", "barracks", "storage", "wall", "tower"} {
+	for _, k := range game.BuildingOrder {
 		defs = append(defs, game.Buildings[k])
 	}
 	troops := []game.TroopDef{}
@@ -26,7 +26,7 @@ func (s *Server) gameConfig(w http.ResponseWriter, r *http.Request) {
 		troops = append(troops, game.Troops[k])
 	}
 	respond(w, 200, map[string]any{
-		"grid": game.GridSize, "builders": game.MaxBuilders, "base_gold_cap": game.BaseGoldCap, "base_energy_cap": game.BaseEnergyCap,
+		"grid": game.MaxGrid, "builders": game.MaxBuilders, "base_gold_cap": game.BaseGoldCap, "base_energy_cap": game.BaseEnergyCap,
 		"buildings": defs, "troops": troops, "settings": st, "points_scale": []int{1, 2, 3, 5, 8},
 	})
 }
@@ -108,7 +108,48 @@ func cityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 	for k, def := range game.Buildings {
 		limits[k] = map[string]int{"built": c.Count(k), "allowed": def.Allowed(th)}
 	}
-	return map[string]any{"buildings": out, "limits": limits, "townhall": th}, nil
+	start, size := game.Land(th)
+	// Wave-reward decor the player's team has unlocked (team achievements, the same for every member).
+	var team string
+	if err = q.QueryRow(ctx, `SELECT COALESCE(team_id::text,'') FROM users WHERE id=$1`, userID).Scan(&team); err != nil {
+		return nil, err
+	}
+	crowns, err := teamCrowns(ctx, q, team)
+	if err != nil {
+		return nil, err
+	}
+	won := game.Trophies(crowns)
+	rewards := map[string]bool{}
+	for _, k := range game.RewardOrder {
+		rewards[k] = won[k]
+	}
+	return map[string]any{"buildings": out, "limits": limits, "townhall": th, "grid": game.MaxGrid, "land": map[string]int{"start": start, "size": size}, "rewards": rewards}, nil
+}
+
+// feedTeam is the team that sees a building's events in the feed. Teammates are the only rivals, so a trap's
+// events are its owner's alone: they still see them as the actor.
+func feedTeam(kind, teamID string) string {
+	if kind == "trap" {
+		return ""
+	}
+	return teamID
+}
+
+// rivalCityDTO is a city as another player sees it before a battle: the traps are hidden.
+func rivalCityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error) {
+	out, err := cityDTO(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	shown := []cityBuilding{}
+	for _, b := range out["buildings"].([]cityBuilding) {
+		if b.Type != "trap" {
+			shown = append(shown, b)
+		}
+	}
+	out["buildings"] = shown
+	delete(out["limits"].(map[string]map[string]int), "trap")
+	return out, nil
 }
 
 func (s *Server) city(w http.ResponseWriter, r *http.Request) {
@@ -194,21 +235,38 @@ func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
 		if err = debtRefusal(b); err != nil {
 			return 0, nil, err
 		}
+		crowns, err := teamCrowns(ctx, tx, a.TeamID)
+		if err != nil {
+			return 0, nil, err
+		}
+		if rf := game.RewardLocked(in.Type, crowns); rf != nil {
+			return 0, nil, asAPI(rf)
+		}
 		spec, rf := game.CheckPlace(c, in.Type, in.X, in.Y, b.Gold)
 		if rf != nil {
 			return 0, nil, asAPI(rf)
 		}
-		dur := game.BuildDuration(st, spec)
 		var id string
-		if err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,0,1,now()+$3*interval '1 millisecond',$4,$5) RETURNING id::text`,
-			a.ID, in.Type, dur.Milliseconds(), in.X, in.Y).Scan(&id); err != nil {
+		if game.Buildings[in.Type].Decor {
+			// Decor is ready at once and needs no builder.
+			err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,$2,1,$3,$4) RETURNING id::text`, a.ID, in.Type, in.X, in.Y).Scan(&id)
+		} else {
+			dur := game.BuildDuration(st, spec)
+			err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,0,1,now()+$3*interval '1 millisecond',$4,$5) RETURNING id::text`,
+				a.ID, in.Type, dur.Milliseconds(), in.X, in.Y).Scan(&id)
+		}
+		if err != nil {
 			return 0, nil, err
 		}
 		name := game.Buildings[in.Type].Name
 		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "build", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: name + ": постройка"}); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.started", "building", id, fmt.Sprintf("%s: строится (%d золота)", name, spec.Cost)); err != nil {
+		summary := fmt.Sprintf("%s: строится (%d золота)", name, spec.Cost)
+		if game.Buildings[in.Type].Decor {
+			summary = fmt.Sprintf("%s: поставлено (%d золота)", name, spec.Cost)
+		}
+		if err = audit(ctx, tx, a.ID, feedTeam(in.Type, a.TeamID), "building.started", "building", id, summary); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
@@ -260,7 +318,7 @@ func (s *Server) upgradeBuilding(w http.ResponseWriter, r *http.Request) {
 		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "upgrade", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)}); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.upgrade", "building", id, fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)); err != nil {
+		if err = audit(ctx, tx, a.ID, feedTeam(target.Type, a.TeamID), "building.upgrade", "building", id, fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
@@ -295,7 +353,112 @@ func armyDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"troops": troops, "queue": queue, "player": p, "server_time": time.Now()}, nil
+	levels, research, err := troopLevels(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	c, err := loadCity(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	var res any
+	if research != nil {
+		res = research
+	}
+	// Why a troop type cannot be trained yet, for the cards.
+	locked := map[string]string{}
+	for _, k := range game.TroopOrder {
+		if rf := game.CanTrain(c, k); rf != nil {
+			locked[k] = rf.Message
+		}
+	}
+	return map[string]any{"troops": troops, "queue": queue, "player": p, "server_time": time.Now(), "locked": locked,
+		"levels": levels, "research": res, "max_troop_level": game.MaxTroopLevel(c), "research_costs": game.Research}, nil
+}
+
+// troopResearch is the workshop job in progress.
+type troopResearch struct {
+	Type        string    `json:"type"`
+	TargetLevel int       `json:"target_level"`
+	StartedAt   time.Time `json:"started_at"`
+	FinishAt    time.Time `json:"finish_at"`
+}
+
+// troopLevels: every troop type's level (1 without a row) and the research in progress, if any.
+func troopLevels(ctx context.Context, q dbtx, userID string) (map[string]int, *troopResearch, error) {
+	levels := map[string]int{}
+	for _, k := range game.TroopOrder {
+		levels[k] = 1
+	}
+	rows, err := q.Query(ctx, `SELECT type, level, target_level, started_at, busy_until FROM troop_levels WHERE user_id=$1`, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	var research *troopResearch
+	for rows.Next() {
+		var kind string
+		var level int
+		var target *int
+		var started, until *time.Time
+		if err = rows.Scan(&kind, &level, &target, &started, &until); err != nil {
+			return nil, nil, err
+		}
+		levels[kind] = level
+		if target != nil && started != nil && until != nil {
+			research = &troopResearch{Type: kind, TargetLevel: *target, StartedAt: *started, FinishAt: *until}
+		}
+	}
+	return levels, research, rows.Err()
+}
+
+// research: the workshop raises one troop type a level — gold now, the level when the timer runs out.
+func (s *Server) research(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			Type string `json:"type"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		levels, research, err := troopLevels(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		spec, rf := game.CheckResearch(c, in.Type, levels[in.Type], research != nil, b.Gold)
+		if rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		dur := game.BuildDuration(st, game.LevelSpec{Seconds: spec.Seconds})
+		if _, err = tx.Exec(ctx, `INSERT INTO troop_levels(user_id,type,level,target_level,started_at,busy_until) VALUES($1,$2,$3,$4,now(),now()+$5*interval '1 millisecond')
+ ON CONFLICT (user_id,type) DO UPDATE SET target_level=EXCLUDED.target_level, started_at=EXCLUDED.started_at, busy_until=EXCLUDED.busy_until`,
+			a.ID, in.Type, levels[in.Type], spec.Level, dur.Milliseconds()); err != nil {
+			if uniqueViolation(err) {
+				return 0, nil, refuse(409, "workshop_busy", "Мастерская уже работает. Дождитесь окончания улучшения.")
+			}
+			return 0, nil, err
+		}
+		name := game.Troops[in.Type].Name
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "research", Gold: -spec.Cost, ActorID: a.ID, Note: fmt.Sprintf("Мастерская: %s, уровень %d", name, spec.Level)}); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "army.research", "troops", in.Type, fmt.Sprintf("Мастерская: %s → уровень %d", name, spec.Level)); err != nil {
+			return 0, nil, err
+		}
+		out, err := armyDTO(ctx, tx, a.ID)
+		return 201, out, err
+	})
 }
 
 func (s *Server) army(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +503,9 @@ func (s *Server) train(w http.ResponseWriter, r *http.Request) {
 		if err = debtRefusal(b); err != nil {
 			return 0, nil, err
 		}
+		if rf := game.CanTrain(c, in.Type); rf != nil {
+			return 0, nil, asAPI(rf)
+		}
 		capacity := c.ArmyCapacity()
 		if capacity == 0 {
 			return 0, nil, refuse(409, "no_barracks", "Постройте казарму, чтобы готовить войска.")
@@ -369,5 +535,129 @@ func (s *Server) train(w http.ResponseWriter, r *http.Request) {
 		}
 		out, err := armyDTO(ctx, tx, a.ID)
 		return 201, out, err
+	})
+}
+
+// moveBuilding: «Переставить» — free and instant, onto a free cell of the player's land.
+func (s *Server) moveBuilding(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			X int `json:"x"`
+			Y int `json:"y"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		_, c, _, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		b, ok := c.Find(id)
+		if !ok {
+			return 0, nil, refuse(404, "not_found", "Здание не найдено.")
+		}
+		if rf := game.CheckMove(c, b, in.X, in.Y); rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE buildings SET x=$2, y=$3 WHERE id=$1`, id, in.X, in.Y); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, feedTeam(b.Type, a.TeamID), "building.moved", "building", id, fmt.Sprintf("%s: переставлено", game.Buildings[b.Type].Name)); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 200, out, err
+	})
+}
+
+// removeDecor: decor can be taken away; its gold is not returned. Real buildings stay.
+func (s *Server) removeDecor(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, _ []byte) (int, any, error) {
+		_, c, _, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		b, ok := c.Find(id)
+		if !ok {
+			return 0, nil, refuse(404, "not_found", "Здание не найдено.")
+		}
+		if !game.Buildings[b.Type].Decor {
+			return 0, nil, refuse(409, "not_decor", "Убрать можно только украшения: здания города остаются.")
+		}
+		if _, err = tx.Exec(ctx, `DELETE FROM buildings WHERE id=$1`, id); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "decor.removed", "building", id, fmt.Sprintf("%s: убрано", game.Buildings[b.Type].Name)); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 200, out, err
+	})
+}
+
+// marketTrade: one exchange at the market. Nothing is earned here — the market only turns one resource into the
+// other at the work-reward rate, minus its fee.
+func (s *Server) marketTrade(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			Give   string `json:"give"`
+			Amount int64  `json:"amount"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		dGold, dEnergy, rf := game.Exchange(st, c, in.Give, in.Amount)
+		if rf == nil {
+			rf = game.TradeFits(c, b.Gold, b.Energy, dGold, dEnergy)
+		}
+		if rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		note := fmt.Sprintf("Рынок: %d золота → %d энергии", -dGold, dEnergy)
+		if in.Give == "energy" {
+			note = fmt.Sprintf("Рынок: %d энергии → %d золота", -dEnergy, dGold)
+		}
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "market", Gold: dGold, Energy: dEnergy, ActorID: a.ID, Note: note}); err != nil {
+			return 0, nil, err
+		}
+		out, err := playerState(ctx, tx, a.ID)
+		return 200, out, err
 	})
 }

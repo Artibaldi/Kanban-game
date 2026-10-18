@@ -3,24 +3,27 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Portrait3D from '../components/Portrait3D.vue'
 import CampScene3D from '../components/CampScene3D.vue'
+import ReinforcePanel from '../components/ReinforcePanel.vue'
 import GameOff from '../components/GameOff.vue'
 import { api } from '../api'
 import { duration, num } from '../lib/format'
+import { nextResearch, researchBlock, troopMult, type Workshop } from '../lib/army'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
 import type { Player } from '../types'
 
 interface QueueItem { id: string; type: string; count: number; started_at: string; finish_at: string }
-interface Army { troops: Record<string, number>; queue: QueueItem[]; player: Player; server_time: string }
+interface Army extends Workshop { troops: Record<string, number>; queue: QueueItem[]; player: Player; server_time: string; locked: Record<string, string> }
 const game = useGame()
 const session = useSession()
 const toasts = useToasts()
 const army = ref<Army | null>(null)
-const counts = ref<Record<string, number>>({ guard: 1, raider: 1, ram: 1 })
+const counts = ref<Record<string, number>>({ guard: 1, raider: 1, archer: 1, rider: 1, ram: 1 })
 const busy = ref('')
 const now = ref(Date.now())
 const flat = ref(false)
+const reinforce = ref<InstanceType<typeof ReinforcePanel>>()
 let offset = 0, tick = 0, reloading = false
 
 async function load() {
@@ -29,6 +32,8 @@ async function load() {
     offset = new Date(a.server_time).getTime() - Date.now()
     army.value = a
     game.setPlayer(a.player)
+    // Ready counts for sending reinforcements follow the camp.
+    reinforce.value?.load()
   } catch (e) { toasts.error(e) }
 }
 onMounted(async () => {
@@ -36,7 +41,8 @@ onMounted(async () => {
   await load()
   tick = window.setInterval(async () => {
     now.value = Date.now() + offset
-    if (!reloading && army.value?.queue.some(q => new Date(q.finish_at).getTime() <= now.value)) {
+    const due = army.value?.queue.some(q => new Date(q.finish_at).getTime() <= now.value) || (army.value?.research && new Date(army.value.research.finish_at).getTime() <= now.value)
+    if (!reloading && due) {
       reloading = true
       await load()
       reloading = false
@@ -52,8 +58,11 @@ function block(type: string) {
   if (!t || !p.value) return 'Загрузка…'
   const n = counts.value[type] || 0
   if (!Number.isInteger(n) || n < 1 || n > 50) return 'Количество — целое число от 1 до 50.'
+  if (army.value?.locked[type]) return army.value.locked[type]
   if (p.value.debt) return 'Сначала погасите долг.'
   if (p.value.army_capacity === 0) return 'Постройте казарму.'
+  // Troops back from a banner may overfill the camp; nothing is lost, training just waits for room.
+  if (free.value <= 0) return 'Лагерь заполнен: войска вернулись со знамени сверх мест.'
   if (t.housing * n > free.value) return `Не хватает мест: свободно ${free.value}.`
   if (t.cost * n > p.value.energy) return `Нужно ${t.cost * n} энергии.`
   return ''
@@ -66,6 +75,21 @@ async function train(type: string) {
     toasts.push({ kind: 'success', title: `Обучение: ${game.troop(type)?.name} × ${counts.value[type]}` }, 2500)
   } catch (e) { toasts.error(e) } finally { busy.value = '' }
 }
+const level = (type: string) => army.value?.levels[type] || 1
+async function raise(type: string) {
+  busy.value = 'research:' + type
+  try {
+    army.value = await api.post<Army>('/army/research', { type })
+    game.setPlayer(army.value.player)
+    toasts.push({ kind: 'success', title: `Мастерская: ${game.troop(type)?.name} → уровень ${army.value.research?.target_level}` }, 2500)
+  } catch (e) { toasts.error(e) } finally { busy.value = '' }
+}
+const resProgress = computed(() => {
+  const r = army.value?.research
+  if (!r) return 0
+  const s = new Date(r.started_at).getTime(), e = new Date(r.finish_at).getTime()
+  return Math.max(0, Math.min(100, ((now.value - s) / Math.max(1, e - s)) * 100))
+})
 /** clampCount: whole troops, 1 to 50, whatever was typed. */
 function clampCount(type: string) { const n = Math.floor(Number(counts.value[type]) || 1); counts.value[type] = Math.min(50, Math.max(1, n)) }
 function step(type: string, d: number) { counts.value[type] = Math.min(50, Math.max(1, (counts.value[type] || 0) + d)) }
@@ -99,12 +123,12 @@ const qProgress = (q: QueueItem) => {
 
     <div class="troops">
       <article v-for="t in game.config?.troops || []" :key="t.type" class="tcard" :class="t.type">
-        <header class="hd"><span class="g-stroke s2">{{ t.name }}</span><span class="ready g-stroke s2"><span class="sr-only">готово </span>×{{ army?.troops[t.type] ?? 0 }}</span></header>
+        <header class="hd"><span class="g-stroke s2">{{ t.name }}<span v-if="level(t.type) > 1" class="lv">ур. {{ level(t.type) }}</span></span><span class="ready g-stroke s2"><span class="sr-only">готово </span>×{{ army?.troops[t.type] ?? 0 }}</span></header>
         <div class="art"><Portrait3D :troop="t.type" :size="120" /></div>
         <p class="role">{{ t.role }}</p>
         <dl class="stats">
-          <div><dt>Здоровье</dt><dd>{{ t.hp }}</dd><span class="meter hp"><span :style="{ width: Math.min(100, t.hp / 1.5) + '%' }" /></span></div>
-          <div><dt>Атака</dt><dd>{{ t.attack }}</dd><span class="meter atk"><span :style="{ width: Math.min(100, t.attack / 0.42) + '%' }" /></span></div>
+          <div><dt>Здоровье</dt><dd>{{ Math.round(t.hp * troopMult(level(t.type))) }}</dd><span class="meter hp"><span :style="{ width: Math.min(100, t.hp / 1.5) + '%' }" /></span></div>
+          <div><dt>Атака</dt><dd>{{ Math.round(t.attack * troopMult(level(t.type))) }}</dd><span class="meter atk"><span :style="{ width: Math.min(100, t.attack / 0.42) + '%' }" /></span></div>
           <div><dt>По укреплениям</dt><dd>×{{ t.siege_mult }}</dd><span class="meter siege"><span :style="{ width: Math.min(100, t.siege_mult / 0.06) + '%' }" /></span></div>
           <div><dt>Мест</dt><dd>{{ t.housing }}</dd></div>
         </dl>
@@ -123,6 +147,31 @@ const qProgress = (q: QueueItem) => {
         <p v-if="block(t.type)" class="reason">{{ block(t.type) }}</p>
       </article>
     </div>
+
+    <section v-if="army" class="g-panel workshop" aria-labelledby="ws-title">
+      <span class="g-ribbon gold"><b id="ws-title">Мастерская</b></span>
+      <p class="empty">Каждый уровень отряда: +10% здоровья и атаки. Улучшение идёт одно за раз; уровень мастерской открывает следующий уровень войск<template v-if="army.max_troop_level > 1"> (сейчас до {{ army.max_troop_level }})</template>.</p>
+      <div v-if="army.research" class="slot">
+        <Portrait3D :troop="army.research.type" :size="48" />
+        <div class="grow">
+          <div class="row"><strong class="grow">{{ game.troop(army.research.type)?.name }} → уровень {{ army.research.target_level }}</strong>
+            <span class="num">{{ duration(new Date(army.research.finish_at).getTime() - now) }}</span></div>
+          <div class="g-bar"><i :style="{ width: resProgress + '%' }" /></div>
+        </div>
+      </div>
+      <ul class="ws-list">
+        <li v-for="t in game.config?.troops || []" :key="t.type" class="ws-row">
+          <Portrait3D :troop="t.type" :size="40" />
+          <div class="grow"><strong>{{ t.name }}</strong><span class="muted"> · уровень {{ level(t.type) }}</span>
+            <p v-if="researchBlock(t.type, army, p?.gold ?? 0, !!p?.debt)" class="reason">{{ researchBlock(t.type, army, p?.gold ?? 0, !!p?.debt) }}</p></div>
+          <button v-if="nextResearch(t.type, army)" class="g-btn small" :disabled="!!researchBlock(t.type, army, p?.gold ?? 0, !!p?.debt) || !!busy" :aria-busy="busy === 'research:' + t.type" @click="raise(t.type)">
+            <span>Ур. {{ nextResearch(t.type, army)!.level }}</span><span class="cost gold"><span class="g-coin" aria-hidden="true" />{{ num(nextResearch(t.type, army)!.cost) }}</span>
+          </button>
+        </li>
+      </ul>
+    </section>
+
+    <ReinforcePanel v-if="army" ref="reinforce" @changed="load" />
 
     <section class="g-panel queue">
       <span class="g-ribbon"><b>Очередь обучения</b></span>
@@ -156,6 +205,13 @@ const qProgress = (q: QueueItem) => {
 .troops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin: 26px 0 40px; }
 .tcard { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; border: 3px solid var(--g-ink); border-radius: 18px; background: var(--g-panel); color: #3a2410; box-shadow: inset 0 0 0 3px #fff6dd, 0 6px 0 #3e2914, 0 6px 0 3px var(--g-ink); overflow: hidden; }
 .hd { display: flex; align-items: center; justify-content: space-between; margin: 0 -16px; padding: 8px 14px 10px; border-bottom: 3px solid var(--g-ink); background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); font-size: 19px; }
+.rider .hd { background: linear-gradient(#a9c8ff, #3e6fd0 55%, #2c4fa0); }
+.archer .hd { background: linear-gradient(#9fd67a, #4f9a3a 55%, #356e27); }
+.lv { margin-left: 6px; font-size: 0.8em; opacity: 0.9; }
+.workshop { display: flex; flex-direction: column; gap: 8px; }
+.ws-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ws-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 2px solid var(--g-panel-b); border-radius: 12px; background: #fff8e6; color: #3a2410; }
+.ws-row .reason { margin: 2px 0 0; }
 .raider .hd { background: linear-gradient(#ff8a7a, #f04848 55%, #cf2f33); }
 .ram .hd { background: linear-gradient(#e2b47a, #b07a45 55%, #8c5e33); }
 .ready { font-size: 18px; }
@@ -177,6 +233,7 @@ const qProgress = (q: QueueItem) => {
 .time { display: inline-flex; align-items: center; gap: 4px; font: 700 13px var(--font-sans); color: #5a3a1e; }
 .wide { width: 100%; justify-content: space-between; }
 .cost { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border: 2px solid var(--g-ink); border-radius: 999px; background: linear-gradient(#9c7bff, #6b4ce6); font-size: 15px; }
+.cost.gold { background: linear-gradient(#ffe27a, #f5b800); color: #3a2410; }
 .reason { font: 700 12px var(--font-sans); color: #9b1f1f; }
 .queue { padding-top: 40px; margin-bottom: var(--space-6); }
 .empty { text-align: center; font: 600 14px var(--font-sans); color: #7a5530; }

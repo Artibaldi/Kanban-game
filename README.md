@@ -1,214 +1,361 @@
-# Бастион задач
+<div align="center">
 
-Канбан для рабочих задач и стратегическая игра про развитие собственного города. Подтверждённые руководителем задачи приносят золото, энергию и опыт. На них игрок строит город, готовит армию и атакует города коллег. Рабочий рейтинг по задачам и боевой рейтинг ведутся раздельно.
+<img src="docs/assets/hero.svg" alt="Task Bastion: a kanban board for real work and a city the whole team defends" width="100%">
 
-> **Вход в демо без пароля.** Он годится только для локального прототипа. Производственной авторизации (пароли, SSO, MFA) нет.
+<br>
 
-## Быстрый старт
+[![CI](https://github.com/Artibaldi/Kanban-game/actions/workflows/ci.yml/badge.svg)](https://github.com/Artibaldi/Kanban-game/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
+[![Go 1.26](https://img.shields.io/badge/Go-1.26-00ADD8?style=flat-square&logo=go&logoColor=white)](server/go.mod)
+[![Vue 3.5](https://img.shields.io/badge/Vue-3.5-42b883?style=flat-square&logo=vuedotjs&logoColor=white)](web/package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript&logoColor=white)](web/tsconfig.json)
+[![PostgreSQL 18](https://img.shields.io/badge/PostgreSQL-18-4169E1?style=flat-square&logo=postgresql&logoColor=white)](compose.local.yml)
+[![Status: MVP](https://img.shields.io/badge/status-MVP-d4a23a?style=flat-square)](#status-and-honest-limits)
 
-Нужны Docker, Go 1.26+ и Node 20+.
+**English** · [Русский](README.ru.md) · [Docs](docs/README.md) · [Roadmap](ROADMAP.md) · [Changelog](CHANGELOG.md)
+
+[**See it**](#see-it) ·
+[**Quick start**](#quick-start) ·
+[**Rules**](#rules) ·
+[**How it works**](#how-it-works) ·
+[**Honest limits**](#status-and-honest-limits)
+
+</div>
+
+<br>
+
+**Task Bastion** (*Бастион задач*) is a kanban board for a team's real work with a city-building strategy
+game on top. Finish tasks, earn resources, grow your city — and defend the team's fortress together against
+the one enemy everybody shares: **the backlog**.
+
+The board stays a work tool. One switch, **Work / Game**, removes the game entirely: no city, no resources, no
+animations, no reward pop-ups.
+
+> [!NOTE]
+> The interface is in Russian. This README is the English entry point; [README.ru.md](README.ru.md) is the
+> full Russian version.
+
+## Why
+
+Gamified work tools usually end up ranking people. Task Bastion is built the other way round:
+
+| When you add a game to a team's work… | …Task Bastion's answer |
+|---|---|
+| 🏆 **Will it turn into a leaderboard of employees?** | No. There is no table comparing people. Everyone sees their own progress and the team's shared progress. Game data is never used to evaluate work. |
+| 🤝 **Who is the opponent?** | The backlog. Planned tasks are enemies, a confirmed task is a defeated enemy, overdue ones hit the walls. The whole team wins or loses a weekly **wave** together. |
+| ⚔️ **Can colleagues fight each other?** | Only in **friendly** battles, only by consent: no cost, no losses, no trophies. |
+| 💰 **Can someone farm rewards?** | A reward is paid exactly once, only for *In review → Done*, and only after the team lead confirms. You cannot confirm your own task. Every write is idempotent. |
+| 🙈 **What if I just want the board?** | Switch to **Work** mode — the game disappears, the kanban stays. |
+
+## See it
+
+| Board | Task card |
+|---|---|
+| <img src="docs/screenshots/board.png" alt="Kanban board with five columns"> | <img src="docs/screenshots/task.png" alt="Task card with estimate, reward and history"> |
+| **Lead review** | **Barracks** |
+| <img src="docs/screenshots/review.png" alt="Lead's review queue with a reward notification"> | <img src="docs/screenshots/army.png" alt="Troop types and the training queue"> |
+| **City** | **Work mode, no game** |
+| <img src="docs/screenshots/city.png" alt="Player's city with a town hall, towers, walls and construction"> | <img src="docs/screenshots/work-mode.png" alt="Home page in Work mode: only tasks and events"> |
+
+<details>
+<summary>Mobile</summary>
+
+<img src="docs/screenshots/mobile-board.png" alt="Board on a phone" width="300"> <img src="docs/screenshots/mobile-city.png" alt="City on a phone in the dark theme" width="300">
+
+</details>
+
+## What you get
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+#### 📋 A real kanban board
+
+Five columns, drag and drop, filters, task cards with history. Estimates (1, 2, 3, 5, 8) are agreed with the
+lead *before* work starts; the lead confirms completion.
+
+</td>
+<td width="33%" valign="top">
+
+#### 🧾 An honest reward ledger
+
+Gold, energy and XP per confirmed task, by a public formula. Paid exactly once, reversed by a separate
+entry, every change in the resource journal.
+
+</td>
+<td width="33%" valign="top">
+
+#### 🏙️ Your own city
+
+A 3D 16×16 island: town hall up to level 7, storage, market, builder's huts, walls, towers, mortars,
+traps. Construction runs on server timers.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+#### 🏰 Team fortress and waves
+
+The backlog marches on the fortress by priority rows. Each week a **wave** is scored in crowns and the whole
+team gets the same reward.
+
+</td>
+<td valign="top">
+
+#### ⚔️ Friendly battles
+
+Challenge a colleague or the whole team. Deterministic server-side battle, replayed in 3D round by round.
+Five troop types, a workshop and a team banner with reinforcements.
+
+</td>
+<td valign="top">
+
+#### 🧘 Work / Game switch
+
+One toggle hides the whole game layer. Game resources never affect work points or wave results.
+
+</td>
+</tr>
+</table>
+
+## Quick start
+
+You need **Docker**, **Go 1.26+** and **Node.js 22+**.
 
 ```bash
-docker compose -f compose.local.yml up -d --wait   # Postgres 18 на 127.0.0.1:15433
-cd web && npm install && npm run build && cd ..    # сборка клиента в web/dist
-cd server && go run ./cmd/server                   # API и клиент: http://127.0.0.1:8090
+git clone https://github.com/Artibaldi/Kanban-game.git
+cd Kanban-game
+
+docker compose -f compose.local.yml up -d --wait   # PostgreSQL 18 on 127.0.0.1:15433
+cd web && npm install && npm run build && cd ..    # builds the client into web/dist
+cd server && go run ./cmd/server                   # app: http://127.0.0.1:8090
 ```
 
-- Режим разработки с горячей перезагрузкой: `scripts/dev.sh` (Vite на http://localhost:5173 проксирует `/api` на :8090).
-- Сбросить базу к демо-данным: `scripts/reset-db.sh` (запускает `go run ./cmd/server -reset`).
-- Все проверки: `scripts/test.sh`.
+On first start the server applies migrations and seeds demo data.
 
-Переменные окружения сервера:
+| Script | What it does |
+|---|---|
+| `scripts/dev.sh` | Development: API on :8090 and Vite on http://localhost:5173 with hot reload |
+| `scripts/reset-db.sh` | Wipes all data and recreates the demo database |
+| `scripts/test.sh` | Every check: Go tests, end-to-end API test, client tests, type check, build |
 
-| Переменная | По умолчанию |
+<details>
+<summary>Server environment variables</summary>
+
+| Variable | Default |
 |---|---|
 | `DATABASE_URL` | `postgres://kanban:kanban-local-only@127.0.0.1:15433/kanban?sslmode=disable` |
 | `ADDR` | `127.0.0.1:8090` |
-| `ORIGINS` | `http://localhost:5173`, `http://127.0.0.1:5173` и те же адреса с портом 8090 |
+| `ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173,http://localhost:8090,http://127.0.0.1:8090` |
 | `STATIC_DIR` | `../web/dist` |
 
-Порт 8090 выбран потому, что 8080 занят локальным порталом Devops-pilot.
+</details>
 
-## Демо-пользователи
+> [!WARNING]
+> **Demo login has no password:** you just pick a user from the list. This is fine for a local prototype only.
+> There are no passwords, SSO or MFA yet. See [SECURITY.md](SECURITY.md).
 
-| Логин | Кто | Команда |
-|---|---|---|
-| `admin` | Администратор. Своего города нет, подтверждает задачи руководителей | — |
-| `irina` | Руководитель | Платформа (проекты PLT, OPS) |
-| `alexey` | Пользователь, ратуша 3 | Платформа |
-| `maria` | Пользователь, ратуша 2, башня в стройке | Платформа |
-| `dmitry` | Пользователь, ратуша 1 | Платформа |
-| `sergey` | Руководитель | Мобайл (проект MOB) |
-| `anna` | Пользователь, ратуша 2 | Мобайл |
-| `pavel` | Пользователь, ратуша 3 | Мобайл |
+### Demo users
 
-В демо-данных:
-- 33 задачи во всех колонках;
-- подтверждения за последние 6 недель, начисленные тем же кодом, что и в рабочем сервисе;
-- задачи с несогласованной оценкой;
-- задача руководителя на проверке, чтобы показать запрет самоподтверждения.
-
-**Сценарий проверки.**
-1. `alexey`: на доске взять «Валидация ИНН» в работу и отправить на проверку.
-2. `irina`: в разделе «Проверка» нажать «Подтвердить».
-3. `alexey`: увидеть награду, баллы в рейтинге, построить стену и улучшить здание.
-4. `alexey`: обучить войска, выбрать соперника и атаковать.
-5. Посмотреть бой, перезагрузить страницу.
-
-## Архитектура
-
-Стек повторяет Devops-pilot-main.
-
-**`server/`: Go 1.26, chi, pgx/v5, PostgreSQL 18.**
-- Миграции встроены в бинарник (`db/migrations/*.sql`, digest + advisory lock).
-- Все правила считаются на сервере. Клиент только показывает результат.
-- `internal/game`: чистые правила без БД — экономика, здания, войска, расчёт боя. Покрыты unit-тестами.
-- `internal/app`: HTTP API.
-  - Сессии: cookie HttpOnly, в базе хранится SHA-256 токена.
-  - Защита: CSRF (cookie + заголовок) и проверка Origin.
-  - Роли проверяются в каждом обработчике.
-- **Любое изменение состояния** проходит через `command()`:
-  - заголовок `Idempotency-Key`, advisory lock на ключ, одна транзакция;
-  - ответ сохраняется, повтор возвращает его побайтно с заголовком `Idempotent-Replay: true`;
-  - тот же ключ с другим телом отклоняется.
-- **Ресурсы** меняются только строкой в `ledger` и обновлением `players` в той же транзакции. Строки игроков блокируются в фиксированном порядке, чтобы избежать взаимоблокировок.
-- **Таймеры на сервере:** горутина раз в секунду завершает стройки и обучение (`FOR UPDATE SKIP LOCKED`). Каждый запрос чтения сначала досчитывает таймеры своего пользователя, поэтому после перезагрузки состояние точное.
-- **Журналы:**
-  - `audit_events` — лента рабочих и игровых событий;
-  - `task_history` — история карточки;
-  - `ledger` — журнал ресурсов;
-  - `work_points_events` — источник рабочего рейтинга;
-  - `scope_events` — объём бэклога.
-
-**`web/`: Vue 3, TypeScript, Vite, Pinia, vue-router. Без UI-кита, как в Devops-pilot.**
-- Приёмы из Devops-pilot:
-  - `api.ts` с ленивым CSRF и `Idempotency-Key` на каждой мутации. При сетевой ошибке повтор идёт с тем же ключом;
-  - дизайн-токены на CSS-переменных, светлая и тёмная тема;
-  - нативный HTML5 drag-and-drop плюс кнопка шага для клавиатуры и тача;
-  - графики на SVG.
-- Город нарисован изометрическим SVG. Графика оригинальная: пять зданий, облик меняется с уровнем, есть состояния «строится» и «разрушено». Войска — три оригинальных SVG-портрета.
-- Переключатель «Работа / Игра»: рабочий режим скрывает город, ресурсы, анимации и игровые уведомления.
-
-## Правила экономики
-
-Все коэффициенты хранятся в `settings.economy` и меняются администратором на странице «Админ». Частичное изменение не сбрасывает остальные значения.
-
-**Награда за задачу** начисляется исполнителю в момент подтверждения руководителем:
-
-```
-золото  = round(gold_per_point × баллы × множитель_приоритета × (1 + on_time_bonus, если подтверждено не позже срока))
-энергия = energy_per_point × баллы
-опыт    = xp_per_point × баллы
-```
-
-Значения по умолчанию:
-- `gold_per_point` 40, `energy_per_point` 10, `xp_per_point` 25;
-- множители приоритета: P1 1.2, P2 1.1, P3 1.0, P4 0.9;
-- `on_time_bonus` 0.10.
-
-| Задача | Золото | Энергия | Опыт |
+| Login | Role | Team | What to look at |
 |---|---|---|---|
-| 5 баллов, P2, в срок | 40×5×1.1×1.1 = **242** | 50 | 125 |
-| 5 баллов, P2, с опозданием | 40×5×1.1 = **220** | 50 | 125 |
-| 1 балл, P4, без срока | 40×1×0.9 = **36** | 10 | 25 |
-| 8 баллов, P1, в срок | 40×8×1.2×1.1 = **422** | 80 | 200 |
+| `alexey` | User | Platform | Town hall 3, army ready — good for the city, fortress and friendly battles |
+| `maria` | User | Platform | Town hall 2, a tower under construction |
+| `dmitry` | User | Platform | Town hall 1, proposed an estimate waiting for approval |
+| `irina` | Lead | Platform | Reviews tasks; her own task is in review and she cannot confirm it herself |
+| `sergey` | Lead | Mobile | Reviews the second team |
+| `anna`, `pavel` | Users | Mobile | The second team — its tasks and colleagues are isolated from the first |
+| `admin` | Admin | — | Users and economy coefficients; has no city |
 
-**Прочие правила:**
-- **Уровень игрока:** для перехода с n на n+1 нужно `100 × n^1.5` опыта (100, 283, 520…). Уровни 2, 3, 5 и 7 открывают ратушу 2–5, поэтому опыт за работу нужен для роста города.
-- **Вместимость:** база 600 золота и 200 энергии плюс хранилища. Доход сверх лимита теряется. В журнале сохраняется значение по формуле (`gold_formula`), чтобы урезание было видно.
-- **Однократность награды обеспечивают три уровня защиты:**
-  1. В «Выполнено» можно перейти только из «На проверке». Повторный перевод — просто перестановка без награды.
-  2. Уникальный индекс `ledger_one_live_reward` не даёт записать вторую живую награду по задаче.
-  3. Повтор запроса с тем же ключом возвращает сохранённый ответ.
-- **Сложность** — шкала 1, 2, 3, 5, 8, согласуется до начала работы:
-  - в «В работе» нельзя, пока оценка не согласована;
-  - оценка руководителя согласуется при создании, оценку участника согласует руководитель;
-  - после согласования менять оценку может только руководитель. Каждое изменение записывается в историю и на график объёма;
-  - у подтверждённой задачи сложность заблокирована (`points_locked`), как и приоритет, срок и исполнитель: от них зависит награда.
-- **Самоподтверждение запрещено** (`self_approval`). Задачу руководителя подтверждает другой руководитель или администратор.
-- **Возврат подтверждённой задачи** делает только руководитель, и обязательно с причиной:
-  - исходная награда помечается отменённой;
-  - добавляется отдельная запись `task_reward_reversal`, связанная с исходной через `reverses_id`, с минусом ровно начисленного;
-  - рабочий рейтинг уменьшается на баллы задачи, объём бэклога увеличивается.
-- **Если ресурсы уже потрачены**, баланс уходит в минус (долг):
-  - здания и войска не отнимаются;
-  - пока баланс отрицательный, строить, учить войска и атаковать нельзя (`debt`);
-  - следующие награды сначала гасят долг, и лимит хранилища на это не влияет.
-- **Дробление задач:** оценку согласует руководитель, а рейтинг считает баллы, а не число задач. Разбиение задачи 8 на восемь задач по 1 рейтинга не добавляет.
+### The full loop in five minutes
 
-## Город, армия и бои
+1. Log in as **alexey** → **Board** → on the “Валидация ИНН” card press “In progress”, then “In review”.
+2. Log out, log in as **irina** → **Review** → “Confirm”. A reward notification appears.
+3. Back to **alexey**: resources in the header went up, **Progress** shows points, and in the **Fortress**
+   enemy PLT-12 has fallen.
+4. **City** → “Build” → “Wall” → pick a free tile. Construction runs on a server timer and survives a reload.
+5. **Fortress**: the task horde by priority rows, overdue PLT-10 at the wall, past waves with crowns.
+6. **Barracks** → train troops → **Fortress** → “Friendly battles” → pick a colleague and a squad → fight.
 
-**Здания.** В каждой строке — что даёт здание и сколько таких можно построить на ратуше 1–5.
+## Rules
 
-| Здание | Что даёт | Лимит на ратуше 1–5 |
+<details>
+<summary><b>Tasks</b></summary>
+
+- Columns: **Backlog → To do → In progress → In review → Done**.
+- Estimates use **1, 2, 3, 5, 8** and are **agreed with the lead before work starts**. An unapproved task
+  cannot be taken into work.
+- The team lead confirms completion. **You cannot confirm your own task.**
+- After confirmation, estimate, priority, due date and assignee are frozen.
+- Only the lead can reopen a confirmed task, and only with a reason.
+
+</details>
+
+<details>
+<summary><b>Rewards</b></summary>
+
+```
+gold   = 40 × points × priority multiplier × 1.1 (if confirmed on time)
+energy = 10 × points
+xp     = 25 × points
+```
+
+Priority multipliers: P1 — 1.2, P2 — 1.1, P3 — 1.0, P4 — 0.9.
+
+| Task | Gold | Energy | XP |
+|---|---|---|---|
+| 5 points, P2, on time | 242 | 50 | 125 |
+| 5 points, P2, late | 220 | 50 | 125 |
+| 8 points, P1, on time | 422 | 80 | 200 |
+| 1 point, P4, no due date | 36 | 10 | 25 |
+
+All coefficients are set by the admin.
+
+- A reward is granted only on *In review → Done*. A unique index prevents a second active reward per task.
+- Every mutating request carries an `Idempotency-Key`; a retry returns the stored response and changes nothing.
+- Reopening a done task does not delete the reward: it writes a separate reversal for exactly the amount paid.
+- **If the resources were already spent**, the balance goes negative. Buildings and troops stay, but you
+  cannot build, train or fight until new rewards pay off the debt.
+- Income above storage capacity is lost; the journal shows both the formula amount and what fit.
+
+</details>
+
+<details>
+<summary><b>Player level, city and troops</b></summary>
+
+- **Player level** grows with XP: level n+1 needs `100 × n^1.5`. Levels 2, 3, 5, 7, 9 and 11 unlock town hall
+  2–7, so the city grows only with work.
+- **Buildings:**
+  - **City:** town hall (city level, up to 7), barracks (army housing), storage and crystal well (gold and
+    energy capacity), builder's hut (+1 builder), market (gold ↔ energy with a fee), tavern (challenges and
+    daily battles).
+  - **Army:** archery range (archers), stable (riders), workshop (troop levels: +10 % HP and attack per level).
+  - **Defense:** walls, towers, mortars (area damage), crossbow towers (target heavy units), traps (fire once,
+    hidden from the opponent), team banner (a garrison of colleagues' troops).
+  - How many of each you can build depends on the town hall level. Two builders to start. Timers are demo-length.
+- **Troops:**
+
+  | Unit | Role | HP | Attack | vs. defenses | Housing |
+  |---|---|---|---|---|---|
+  | Guard | Balanced | 100 | 20 | ×0.8 | 1 |
+  | Raider | Strong attack, weak defense | 45 | 42 | ×0.35 | 1 |
+  | Archer | Shoots over walls, fragile | 35 | 26 | ×0.5 | 1 |
+  | Rider | Rides around walls, hits towers first | 110 | 30 | ×1 | 2 |
+  | Ram | Breaks walls and towers | 150 | 10 | ×6 | 2 |
+
+</details>
+
+<details>
+<summary><b>Fortress and waves</b></summary>
+
+- **Enemies** are tasks in *To do*, *In progress* and *In review* with an approved estimate. Size: 1–2 points —
+  goblin, 3 — knight, 5 — giant, 8 — dragon. Row = priority: P1 is closest to the walls. Backlog tasks are fog.
+- **Damage.** On each working day every overdue enemy hits the fortress once: 2 % durability per point. It
+  never drops below 10 %. No names are shown next to enemies.
+- **A wave** is a calendar week (Mon–Sun, UTC); the admin can make it up to 4 weeks long. The wave plan is
+  fixed: a task that became an enemy stays in the plan even if it is moved back to the backlog.
+- **Crowns:** 1 — ≥ 50 % of the plan closed; 2 — ≥ 80 % and no overdue P1; 3 — the whole plan and no overdue tasks.
+- **Shared reward** for every team member, including the lead, people on leave and those in Work mode:
+  60 / 140 / 250 gold and 15 / 35 / 60 energy for 1 / 2 / 3 crowns, plus a defense bonus of up to 20 % from the
+  team's average city and army strength. Fortress repair: +10 % / +25 % / full.
+- A background worker scores waves; a repeated or concurrent scoring never doubles anything.
+
+</details>
+
+<details>
+<summary><b>Friendly battles and the team banner</b></summary>
+
+- Only within your team and only with colleagues who turned on “Accept friendly battles”.
+- Free: no energy spent, no troops lost, no trophies. Reward: 5 XP, up to 3 battles a day; the tavern adds more.
+  A battle can start from a challenge — direct or open to the whole team; a challenge expires after a day.
+- Asynchronous, up to 6 rounds. Each round towers fire first, then troops hit walls, towers, the town hall and the
+  rest. Randomness is capped at ±10 % per hit; the battle seed is stored.
+- **Team banner.** Colleagues send troops to your banner. The garrison takes hits after the walls, strikes back
+  and never dies; you can release it at any time.
+
+</details>
+
+<details>
+<summary><b>Progress</b></summary>
+
+- **My progress:** my points per week over 8 weeks, best week, total. No comparison with colleagues.
+- **Team:** team points per week, overdue tasks now, wave results.
+- **Backlog volume:** a 30-day chart. Added tasks, re-estimates, reopenings and completions are shown
+  separately, so you can see whether the work grows or the team burns it down.
+
+</details>
+
+## How it works
+
+```
+server/                  Go 1.26 · chi · pgx/v5 · PostgreSQL 18
+  cmd/server/            startup: migrations, demo data, timers, HTTP
+  db/migrations/         SQL migrations, embedded into the binary
+  internal/game/         pure rules: economy, buildings, troops, battle, waves (unit tests)
+  internal/app/          HTTP API, transactions, journals, end-to-end test
+web/                     Vue 3 · TypeScript · Vite · Pinia · vue-router · three.js
+  src/pages/             screens
+  src/components/        board, task card, 3D city and fortress, troops, charts
+  src/ui/                design tokens, light and dark themes, icons
+scripts/                 dev, reset-db, test
+```
+
+- **All rules live on the server.** Rewards, construction, training, waves, fortress damage and battles are
+  computed server-side; the client only shows the result.
+- **One transaction per action.** Debit, credit, journal entry and state change commit together.
+- **Journals:** resource journal (every reward linked to its task), task history, team event feed, progress
+  events, backlog volume events.
+- **Server timers.** A background worker finishes construction and training every second, and every 30 seconds
+  opens new waves, closes finished ones and applies overdue damage. Each request first catches up the user's timers.
+- **Prototype security:** sessions in an HttpOnly cookie (only the token hash is stored), CSRF token and Origin
+  check, roles checked on the server, users see only their own team's tasks, fortress and colleagues.
+
+| Screen | Path | What's there |
 |---|---|---|
-| Ратуша | Уровень города (1–5) | 1 |
-| Казарма | Места в армии | 1/1/2/2/3 |
-| Хранилище | Вместимость золота и энергии | 1/1/2/2/3 |
-| Стена | Прочность укреплений | 4/8/12/16/20 |
-| Башня | Урон по атакующим за раунд | 1–5 |
+| Home | `/` | My tasks, weekly points, mini city, fortress durability, event feed |
+| Board | `/board` | Five columns, drag and drop, filters, new task, task card |
+| Review | `/review` | Lead only: confirm, return, approve estimates |
+| Fortress | `/fortress` | Team fortress, task horde, current wave, wave history |
+| City | `/city` | 3D 16×16 island: build, upgrade and move buildings, decorations |
+| Barracks | `/army` | Training, workshop, reinforcements to colleagues' banners |
+| Friendly battles | `/fortress/duels` | Challenges, opponent's city preview, squad, history |
+| Battle | `/battles/:id` | 3D replay by server rounds, log and result |
+| Progress | `/progress` | My progress, team progress, waves, backlog volume chart |
+| Settings | `/settings` | Work / Game mode, friendly battles, theme, resource journal |
+| Admin | `/admin` | Roles, teams, economy coefficients, working days and wave length |
 
-- Размещать здания можно на свободных клетках поля 12×12.
-- Проверяются свободная клетка, лимит для уровня ратуши, требуемый уровень ратуши и игрока, 2 строителя и золото.
-- Таймеры демонстрационные: от 3 до 90 секунд. Их масштаб задаёт `time_scale`.
+## Testing
 
-**Войска.**
-- Страж — сбалансированный боец: 100 здоровья, атака 20.
-- Налётчик — сильная атака и слабая защита: 45 здоровья, атака 42, по укреплениям ×0.35.
-- Таран — против укреплений: 150 здоровья, атака 10, по стенам и башням ×6, занимает 2 места.
-- Обучение стоит энергии и идёт в последовательной очереди. Места в казармах учитывают и очередь.
+```bash
+scripts/test.sh
+```
 
-**Бой** — асинхронный и детерминированный по сохранённому зерну. Он идёт не больше 6 раундов:
-1. Башни стреляют, урон распределяется по войскам пропорционально их здоровью.
-2. Войска бьют по стенам, затем по башням, затем по ратуше и остальным зданиям.
-- Случайный фактор — ±10 % на удар.
-- Звёзды: разрушения ≥ 50 %, ратуша пала, 100 % разрушений.
-- Награда создаётся системой: золото `50 + 3 × % × (1 + 0.25 × (ратуша защитника − 1))`, опыт `5 + 15 × звёзды`.
-- Трофеи: атакующий получает +8 за звезду, защитник теряет 3 за звезду. При поражении атакующий −5, защитник +5.
-- Защитник не теряет ни ресурсов, ни зданий.
-- Соперники подбираются по ратуше ±1, по умолчанию только из своей команды (`battle_scope`).
-- После атаки защитник получает щит на 10 минут, а ту же пару нельзя повторить 30 минут.
-- Погибшие войска теряются, выжившие возвращаются.
-- Атака стоит 20 энергии.
+- **`internal/game`** — reward and level formulas, build and upgrade rules, battle determinism, crowns, fortress
+  damage and repair, wave windows, market, banner, challenges.
+- **End-to-end API test** on a throwaway database that is created and dropped: a reward is paid exactly once,
+  a retried request returns the stored response, self-confirmation and cross-team access are refused,
+  construction finishes on its timer, friendly battles are free and limited, wave plans are fixed and
+  scored once, a reversal of a spent reward leads to debt. The suite also runs under `TZ=America/New_York`
+  to prove the API does not depend on the server's timezone.
+- **Client** — board, city, army, fortress and battle-view rules, `vue-tsc`, production build.
 
-## Рейтинги
+CI runs the same checks on every push and pull request ([`ci.yml`](.github/workflows/ci.yml)).
 
-- **Рабочий рейтинг** — сумма баллов сложности задач, подтверждённых за период: неделя с понедельника, календарный месяц или всё время.
-  - Считается внутри команды с общей шкалой оценки, по желанию — по одному проекту.
-  - Показывает число задач, баллы за неделю и месяц и динамику за 8 недель.
-  - Отмена подтверждения вычитает баллы. Бои в этот рейтинг не пишут.
-- **График объёма бэклога** за 30 дней строится из `scope_events`. Остаток показан линией, отдельно видны добавление, переоценка, возврат задач и выполненная работа.
-- **Боевой рейтинг** — трофеи, победы и удержанные защиты. Он никак не связан с рабочим.
+## Status and honest limits
 
-## Проверки
+Task Bastion is an **MVP**. What it does not do yet:
 
-`scripts/test.sh`:
-- `internal/game` — формулы наград и уровней, лимиты, правила постройки и улучшения, детерминированность и ограниченность боя, эффективность таранов.
-- `internal/app/e2e_test.go` — сквозной сценарий через HTTP на временной базе, которая создаётся и удаляется:
-  - взятие задачи в работу, отправка на проверку, подтверждение, награда ровно один раз;
-  - повтор с тем же ключом даёт replay, тот же ключ с другим телом даёт `idempotency_conflict`, новый запрос не платит;
-  - баллы появляются в рейтинге;
-  - `self_approval`, `points_locked`, `estimate_not_agreed`;
-  - пользователь чужой команды получает 404;
-  - постройка, завершение по серверному таймеру, улучшение, `insufficient_gold`;
-  - обучение, атака, щит защитника, неизменность рабочего рейтинга после боя;
-  - возврат задачи после траты ресурсов: запись отмены, баллы минус, долг, `debt` при попытке строить;
-  - повторное подтверждение даёт ровно одну живую награду.
-- `web/tests` — правила доски на клиенте (`node --test`), `vue-tsc` и сборка.
+- Login is demo-only, without passwords.
+- Data refreshes on actions and every 15 seconds; there are no live notifications.
+- Battles are computed from aggregate strength of defenses and buildings; troops do not path across the map.
+- The interface is Russian only.
 
-## Ограничения MVP и следующие шаги
+What's next is in the [roadmap](ROADMAP.md).
 
-**Ограничения:**
-- Вход демонстрационный, без паролей. Нужны SSO или пароль с MFA и ротация сессий.
-- Одна организация. Команды разделены, но мультиарендности нет.
-- Обновления приходят опросом раз в 15 секунд и при действиях. Живых обновлений (SSE или WebSocket) нет.
-- Бой считается по агрегатам (стены, башни, здания), без позиционного поиска пути по полю.
-- Графика выполнена на SVG без спрайтов и звука.
+## Contributing, security, license
 
-**Следующие шаги:**
-- Производственная авторизация и аудит входа.
-- SSE-уведомления о подтверждениях и атаках.
-- Недельные сезоны трофеев.
-- Импорт задач из Jira.
-- Настраиваемая шкала оценок для каждой команды.
-- Позиционный бой с размещением войск.
+- How to run, test and send a change: [CONTRIBUTING.md](CONTRIBUTING.md).
+- Security issues go through [SECURITY.md](SECURITY.md), not public issues.
+- Licensed under [Apache-2.0](LICENSE). © 2026 Arti.

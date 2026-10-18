@@ -45,14 +45,15 @@ export interface Player {
   army_capacity: number; army_housing: number; army_queued: number
 }
 
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower'
+export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond' | 'flags' | 'arch' | 'fountain' | 'statue'
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | 'archery' | 'workshop' | 'mortar' | 'trap' | 'stable' | 'crossbow' | 'banner' | DecorType
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
-  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number
+  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number; garrison?: number
 }
-export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean }
-export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number }
+export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean; reward?: string }
+export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number; ranged?: boolean; flank?: boolean }
 
 export interface Settings {
   gold_per_point: number; energy_per_point: number; xp_per_point: number
@@ -76,18 +77,25 @@ export interface CityBuilding {
 export interface City {
   buildings: CityBuilding[]; limits: Record<string, { built: number; allowed: number }>; townhall: number
   player?: Player; server_time?: string
+  /** The island is grid×grid; the player's land is the centred square start…start+size. */
+  grid?: number; land?: { start: number; size: number }
+  /** Wave-reward decor the team has unlocked. */
+  rewards?: Record<string, boolean>
 }
 
-export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number }
+export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number
+  mortar_dmg?: number; mortars?: number; trap_dmg?: number; traps?: number; crossbow_dps?: number; crossbows?: number; garrison?: Record<string, number> }
 export interface Round {
   n: number; tower_damage: number; killed: Record<string, number>; alive: Record<string, number>
-  wall_damage: number; tower_hit: number; base_damage: number
+  wall_damage: number; tower_hit: number; base_damage: number; mortar_damage?: number; crossbow_damage?: number; trap_damage?: number
+  garrison_damage?: number; garrison_hit?: number; garrison_hp?: number
   wall_hp: number; tower_hp: number; townhall_hp: number; other_hp: number; events: string[]
 }
 export interface Battle {
   id: string; kind: 'raid' | 'friendly'; attacker_id: string; defender_id: string; attacker: string; defender: string; seed: number
   army: Record<string, number>; losses: Record<string, number>; defense: Defense; rounds: Round[]
   destruction: number; stars: number; gold: number; xp: number; attacker_trophies: number; defender_trophies: number; created_at: string
+  troop_levels?: Record<string, number>
 }
 export interface FeedItem { id: number; actor: string; action: string; target_type: string; target_id: string | null; summary: string; created_at: string }
 
@@ -112,3 +120,15 @@ export interface MyProgress { weeks: string[]; weekly: number[]; this_week: numb
 export interface TeamProgress { weeks: string[]; team_weekly: number[]; overdue_now: number; waves: WaveSummary[] }
 export interface Duelist { user_id: string; display_name: string; townhall: number; available: boolean; reason: string; defense: Defense }
 export interface TeamSettings { id: string; name: string; work_days: number[]; wave_weeks: number }
+
+export type ChallengeStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'done' | 'open' | 'closed'
+export interface Challenge {
+  id: string; from_id: string; from_name: string; to_id: string | null; to_name: string | null; open: boolean
+  status: ChallengeStatus; created_at: string; expires_at: string; attacked: boolean
+}
+export interface ArenaMember { user_id: string; display_name: string; townhall: number; defense: Defense; accepts_friendly: boolean }
+export interface ArenaState {
+  incoming: Challenge[]; outgoing: Challenge[]; open: Challenge[]; team: ArenaMember[]
+  today: number; per_day: number; friendly_xp: number
+  against_me: { id: string; attacker_id: string; attacker: string; stars: number; destruction: number; created_at: string }[]
+}

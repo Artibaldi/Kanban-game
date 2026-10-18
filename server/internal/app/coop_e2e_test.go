@@ -101,8 +101,10 @@ func TestBacklogTaskJoinsPlanWhenReady(t *testing.T) {
 // endCurrentWave puts the team's open wave entirely in the past so the next tick settles it.
 func endCurrentWave(t *testing.T, pool *pgxpool.Pool, team string) {
 	t.Helper()
-	_, err := pool.Exec(context.Background(), `UPDATE waves SET starts_at=now()-interval '7 days', ends_at=clock_timestamp()
- WHERE team_id=(SELECT id FROM teams WHERE name=$1) AND settled_at IS NULL`, team)
+	// The end comes from the Go clock, like every task and reward timestamp: the database clock in Docker can lag
+	// the host by a few milliseconds, which would put a just-approved task after the wave's end.
+	_, err := pool.Exec(context.Background(), `UPDATE waves SET starts_at=$2::timestamptz-interval '7 days', ends_at=$2
+ WHERE team_id=(SELECT id FROM teams WHERE name=$1) AND settled_at IS NULL`, team, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}

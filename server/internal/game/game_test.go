@@ -106,8 +106,8 @@ func TestFightDeterministicAndBounded(t *testing.T) {
 		Building{Type: "barracks", Level: 1}, Building{Type: "storage", Level: 1},
 	))
 	army := map[string]int{"guard": 8, "raider": 6, "ram": 2}
-	a := Fight(army, d, 42, 0.1)
-	b := Fight(army, d, 42, 0.1)
+	a := Fight(army, nil, d, 42, 0.1)
+	b := Fight(army, nil, d, 42, 0.1)
 	if !reflect.DeepEqual(a, b) {
 		t.Fatal("same seed must give same battle")
 	}
@@ -120,7 +120,7 @@ func TestFightDeterministicAndBounded(t *testing.T) {
 		}
 	}
 	// Spread is bounded: without randomness the result stays close.
-	flat := Fight(army, d, 42, 0)
+	flat := Fight(army, nil, d, 42, 0)
 	if diff := flat.Destruction - a.Destruction; diff > 25 || diff < -25 {
 		t.Fatalf("random factor too strong: %d vs %d", flat.Destruction, a.Destruction)
 	}
@@ -129,8 +129,8 @@ func TestFightDeterministicAndBounded(t *testing.T) {
 func TestFightRamsBeatWalls(t *testing.T) {
 	d := DefenseOf(city(Building{Type: "townhall", Level: 1}, Building{Type: "wall", Level: 2}, Building{Type: "wall", Level: 2}, Building{Type: "wall", Level: 2}, Building{Type: "tower", Level: 1}))
 	// Same housing: 3 rams take the room of 6 raiders.
-	withRams := Fight(map[string]int{"guard": 4, "ram": 3}, d, 7, 0)
-	noRams := Fight(map[string]int{"guard": 4, "raider": 6}, d, 7, 0)
+	withRams := Fight(map[string]int{"guard": 4, "ram": 3}, nil, d, 7, 0)
+	noRams := Fight(map[string]int{"guard": 4, "raider": 6}, nil, d, 7, 0)
 	if withRams.Destruction <= noRams.Destruction {
 		t.Fatalf("rams should break fortified cities better: %d vs %d", withRams.Destruction, noRams.Destruction)
 	}
