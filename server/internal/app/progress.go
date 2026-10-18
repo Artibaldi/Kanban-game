@@ -93,7 +93,7 @@ func (s *Server) teamProgress(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	waves, err := settledWaves(ctx, s.db, team, 8)
+	waves, err := settledWaves(ctx, s.db, team, a.ID, 8)
 	if err != nil {
 		failErr(w, err)
 		return

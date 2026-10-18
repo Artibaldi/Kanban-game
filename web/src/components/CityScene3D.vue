@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The 3D city. Loaded on demand; when WebGL is unavailable the page falls back to the flat city.
 // While placing, the arrow keys move a cursor over the grid and Enter builds there.
-import { onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { duration } from '../lib/format'
 import type { BuildingType, CityBuilding } from '../types'
 import type { CityStage } from '../game3d/cityStage'
@@ -32,6 +32,8 @@ onMounted(async () => {
     s.onPick = id => { const b = props.buildings.find(x => x.id === id); if (b) emit('select', b); else emit('deselect') }
     s.onCell = (x, y) => emit('cell', x, y)
     s.onLost = () => emit('unavailable')
+    // Mouse and keyboard share one cursor.
+    s.onHoverCell = c => { cursor.value = c }
     s.sync(items(), false)
     s.setTimers(timers())
     s.select(props.selectedId)
@@ -46,6 +48,8 @@ watch(() => props.now, () => stage.value?.setTimers(timers()))
 watch(() => props.selectedId, id => { stage.value?.select(id); stage.value?.setTimers(timers()) })
 watch(() => props.placing, p => {
   stage.value?.setPlacing(!!p)
+  // Placing starts on the field: the arrow keys work at once.
+  if (p) nextTick(() => canvas.value?.focus())
   if (p) { stage.value?.setCursor(cursor.value); announce.value = `Выберите клетку стрелками, Enter — построить. Клетка ${cursor.value.x + 1}:${cursor.value.y + 1}.` }
 })
 
@@ -61,7 +65,9 @@ function onKey(e: KeyboardEvent) {
     announce.value = `Клетка ${cursor.value.x + 1}:${cursor.value.y + 1}${taken ? `, занята: ${taken.name}` : ', свободна'}`
   } else if (e.key === 'Enter') {
     e.preventDefault()
-    if (!props.buildings.some(b => b.x === cursor.value.x && b.y === cursor.value.y)) emit('cell', cursor.value.x, cursor.value.y)
+    const taken = props.buildings.find(b => b.x === cursor.value.x && b.y === cursor.value.y)
+    if (taken) announce.value = `Клетка ${cursor.value.x + 1}:${cursor.value.y + 1} занята: ${taken.name}. Выберите свободную.`
+    else emit('cell', cursor.value.x, cursor.value.y)
   }
 }
 </script>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import CityScene from '../components/CityScene.vue'
 import CityScene3D from '../components/CityScene3D.vue'
@@ -58,7 +58,12 @@ const defs = computed(() => game.config?.buildings.filter(d => d.type !== 'townh
 const builders = computed(() => game.config?.builders || 2)
 const busyList = computed(() => city.value?.buildings.filter(b => b.busy_until) || [])
 
-function select(b: CityBuilding) { placing.value = null; selectedId.value = b.id }
+function select(b: CityBuilding) {
+  placing.value = null
+  selectedId.value = b.id
+  // One column (tablet, phone): the panel is below the field — bring it into view.
+  if (innerWidth <= 1100) nextTick(() => document.querySelector('.sel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
 function onKey(e: KeyboardEvent) { if (e.key === 'Escape') { if (placing.value) placing.value = null; else selectedId.value = null } }
 onMounted(() => addEventListener('keydown', onKey))
 onUnmounted(() => removeEventListener('keydown', onKey))
@@ -73,6 +78,8 @@ async function place(x: number, y: number) {
     game.setPlayer(c.player)
     toasts.push({ kind: 'success', title: `${game.building(placing.value)?.name}: стройка началась` }, 2500)
     placing.value = null
+    // Back to the list the build started from.
+    nextTick(() => document.querySelector<HTMLElement>('.build:not(:disabled)')?.focus())
   } catch (e) { toasts.error(e) } finally { busy.value = false }
 }
 async function upgrade(b: CityBuilding) {
@@ -217,7 +224,7 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
 .build strong { font: 800 15px var(--font-game); }
 .meta { font: 600 12px var(--font-sans); color: #7a5530; }
 .busy { display: flex; flex-direction: column; gap: 6px; font: 700 14px var(--font-sans); color: #3a2410; margin-bottom: 10px; }
-@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } .tip { display: none; } }
 @media (max-width: 767px) {
   .arena { height: calc(100vh - 230px); min-height: 480px; border-radius: 22px; }
   .tip { display: none; }

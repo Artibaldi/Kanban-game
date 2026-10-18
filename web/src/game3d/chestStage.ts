@@ -21,6 +21,8 @@ export class ChestStage {
   private raf = 0
   private clock = new THREE.Clock()
   private ro: ResizeObserver
+  onLanded: () => void = () => {}
+  onLost: () => void = () => {}
 
   constructor(private canvas: HTMLCanvasElement, reduced: boolean) {
     this.kit = new Kit(reduced)
@@ -32,6 +34,8 @@ export class ChestStage {
     this.build()
     this.ro = new ResizeObserver(() => this.resize())
     this.ro.observe(canvas.parentElement!)
+    canvas.addEventListener('webglcontextlost', this.onContextLost)
+    document.addEventListener('visibilitychange', this.onVis)
     this.resize()
     this.loop()
     this.drop()
@@ -80,7 +84,7 @@ export class ChestStage {
     k.tween(0.45, q => { g.position.y = 0.47 + 3.2 * (1 - eIn(q)) }, () => {
       k.poof(this.scene, new THREE.Vector3(-1, 0.6, 0.6), 0.6, 3)
       k.poof(this.scene, new THREE.Vector3(1, 0.6, 0.6), 0.6, 3)
-      k.tween(0.25, q => { const s = Math.sin(q * Math.PI); g.scale.set(1 + 0.15 * s, 1 - 0.15 * s, 1 + 0.15 * s) }, () => { this.state = 'idle' })
+      k.tween(0.25, q => { const s = Math.sin(q * Math.PI); g.scale.set(1 + 0.15 * s, 1 - 0.15 * s, 1 + 0.15 * s) }, () => { if (this.state === 'drop') this.state = 'idle'; this.onLanded() })
     })
   }
 
@@ -119,8 +123,13 @@ export class ChestStage {
     this.renderer.setSize(this.W, this.H, false)
   }
 
+  private running = true
+  private onVis = () => { this.running = document.visibilityState === 'visible'; if (this.running) this.clock.getDelta() }
+  private onContextLost = (e: Event) => { e.preventDefault(); cancelAnimationFrame(this.raf); this.onLost() }
+
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop)
+    if (!this.running) return
     const dt = Math.min(this.clock.getDelta(), 0.05)
     if (!this.kit.reduced) this.T += dt
     this.kit.update(dt, this.T)
@@ -141,6 +150,8 @@ export class ChestStage {
   dispose() {
     cancelAnimationFrame(this.raf)
     this.ro.disconnect()
+    this.canvas.removeEventListener('webglcontextlost', this.onContextLost)
+    document.removeEventListener('visibilitychange', this.onVis)
     this.kit.dispose()
     this.renderer.dispose()
     this.renderer.forceContextLoss()

@@ -141,6 +141,19 @@ func TestSettleWaveRewardsWholeTeam(t *testing.T) {
 	if n != 4 {
 		t.Fatalf("every member incl. lead and work-mode maria gets the chest: %d", n)
 	}
+	// The chest ceremony shows exactly what this member was paid, read back from the ledger.
+	var paid int64
+	_ = pool.QueryRow(ctx, `SELECT l.gold FROM ledger l JOIN users u ON u.id=l.user_id WHERE l.kind='wave_reward' AND u.login='irina' ORDER BY l.id DESC LIMIT 1`).Scan(&paid)
+	w0 := items(irina.must(200, "GET", "/waves", nil, ""))[0]
+	chest, _ := w0["chest"].(map[string]any)
+	if chest == nil || int64(num(chest["gold"])) != paid || num(chest["energy"]) <= 0 {
+		t.Fatalf("chest from the ledger: paid %d, got %v", paid, w0)
+	}
+	// Seeded past waves were never paid: no chest to show.
+	ws := items(irina.must(200, "GET", "/waves", nil, ""))
+	if c := ws[len(ws)-1]["chest"]; c != nil {
+		t.Fatalf("an unpaid wave has no chest: %v", ws[len(ws)-1])
+	}
 	var next int
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM waves WHERE settled_at IS NULL AND starts_at<=now() AND ends_at>now() AND team_id=(SELECT id FROM teams WHERE name='Платформа')`).Scan(&next)
 	if next != 1 {
@@ -349,10 +362,6 @@ func TestAdminTeamsAndSeed(t *testing.T) {
 	ws := items(alexey.must(200, "GET", "/waves", nil, ""))
 	if len(ws) < 3 {
 		t.Fatalf("seeded past waves: %d", len(ws))
-	}
-	// The chest ceremony shows what was paid, so it needs the wave's defence bonus.
-	if b, ok := ws[0]["defense_bonus"].(float64); !ok || b < 0 || b > 0.2 {
-		t.Fatalf("defense_bonus: %v", ws[0])
 	}
 	var hp int
 	_ = pool.QueryRow(context.Background(), `SELECT hp FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp)

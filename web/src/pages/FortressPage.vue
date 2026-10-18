@@ -121,6 +121,11 @@ function showResult(b: NonNullable<typeof battle.value>) {
 function speed() { const b = battle.value; if (!b) return; b.speed = b.speed === 1 ? 2 : 1; scene.value?.setSpeed(b.speed) }
 function skip() { scene.value?.finishWave() }
 function closeBattle() { scene.value?.endWave(); battle.value = null }
+function closeChest() {
+  chestOpen.value = false
+  closeBattle()
+  nextTick(() => document.querySelector<HTMLElement>('.actions .g-btn')?.focus())
+}
 // Escape closes the topmost game panel; focus moves into a panel when it opens and back when it closes.
 let opener: HTMLElement | null = null
 function select(id: string | null) {
@@ -138,11 +143,9 @@ function onKey(e: KeyboardEvent) {
 onMounted(() => addEventListener('keydown', onKey))
 onUnmounted(() => removeEventListener('keydown', onKey))
 const chest = computed(() => {
-  const s = game.config?.settings, w = battle.value?.wave, c = w?.crowns ?? 0
-  if (!s || !w) return null
-  // The same formula as the server's WaveChest: base by crowns, plus the wave's defence bonus.
-  const k = 1 + (w.defense_bonus || 0)
-  return { gold: Math.round((s.wave_chest_gold[c] ?? 0) * k), energy: Math.round((s.wave_chest_energy[c] ?? 0) * k), repair: c >= 3 ? 100 : s.repair_by_crowns[c] ?? 0 }
+  // Exactly what the server paid this viewer for the wave, read back from the ledger; null when nothing was paid.
+  const w = battle.value?.wave
+  return w?.chest && (w.chest.gold > 0 || w.chest.energy > 0) ? w.chest : null
 })
 const resultTitle = computed(() => {
   const c = battle.value?.wave.crowns ?? 0
@@ -213,13 +216,17 @@ const resultTitle = computed(() => {
             <div v-if="chest" class="sums">
               <div><span class="g-coin" aria-hidden="true" />+{{ chest.gold }}</div>
               <div><Icon name="zap" :size="16" />+{{ chest.energy }}</div>
-              <div><Icon name="shield" :size="16" />{{ chest.repair >= 100 ? 'стены как новые' : `+${chest.repair}% стенам` }}</div>
+              <div><Icon name="shield" :size="16" />{{ chest.repair > 0 ? `+${chest.repair}% стенам` : 'стены целы' }}</div>
             </div>
-            <p class="note">Сундук команды получает каждый участник{{ battle.wave.defense_bonus ? `, с бонусом обороны +${Math.round(battle.wave.defense_bonus * 100)}%` : '' }}. {{ battle.wave.crowns === 0 ? 'Без короны стены не чинятся — следующая волна начнётся с трещинами.' : '' }}</p>
+            <p class="note">
+              <template v-if="chest">Сундук команды получил каждый участник{{ battle.wave.defense_bonus ? `, с бонусом обороны +${Math.round(battle.wave.defense_bonus * 100)}%` : '' }}.</template>
+              <template v-else-if="battle.wave.crowns > 0">За эту волну вам сундук не начислялся.</template>
+              <template v-else>Без короны нет сундука, и стены не чинятся — следующая волна начнётся с трещинами.</template>
+            </p>
             <div class="row-btns">
               <button class="g-btn blue" @click="startBattle(battle.wave)"><span>Ещё раз</span></button>
-              <button v-if="battle.wave.crowns > 0 && chest" class="g-btn yellow" @click="chestOpen = true"><span>Открыть сундук</span></button>
-              <button v-else class="g-btn" @click="closeBattle"><span>Готово</span></button>
+              <button class="g-btn" @click="closeBattle"><span>Готово</span></button>
+              <button v-if="chest" class="g-btn yellow" @click="chestOpen = true"><span>Открыть сундук</span></button>
             </div>
           </div>
         </div>
@@ -249,7 +256,7 @@ const resultTitle = computed(() => {
         </div>
       </section>
 
-      <WaveChest v-if="chestOpen && chest && battle" :gold="chest.gold" :energy="chest.energy" :repair="chest.repair" :crowns="battle.wave.crowns" @close="chestOpen = false; closeBattle()" />
+      <WaveChest v-if="chestOpen && chest && battle" :gold="chest.gold" :energy="chest.energy" :repair="chest.repair" :crowns="battle.wave.crowns" @close="closeChest" />
 
       <!-- The same horde for screen readers and keyboards: the 3D scene is decorative. -->
       <section class="sr-only" aria-label="Враги на поле">

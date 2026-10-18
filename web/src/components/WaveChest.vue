@@ -13,7 +13,10 @@ const stage = shallowRef<ChestStage | null>(null)
 const phase = ref<'closed' | 'opening' | 'open'>('closed')
 const shown = ref([0, 0, 0])
 const flat = ref(false)
+/** The chest can be opened once it has landed (or the flat fallback is chosen). */
+const ready = ref(false)
 let unmounted = false
+const timers: number[] = []
 
 const cards = [
   { cls: 'gold', hd: 'Золото', lbl: 'каждому участнику' },
@@ -30,27 +33,40 @@ onMounted(async () => {
     const ok = (await import('../game3d/fortressStage')).webglAvailable()
     if (unmounted) return
     if (!ok || !canvas.value) throw new Error('no webgl')
-    stage.value = new mod.ChestStage(canvas.value, reduced())
-  } catch { if (!unmounted) flat.value = true }
+    const s = new mod.ChestStage(canvas.value, reduced())
+    s.onLanded = () => { ready.value = true }
+    s.onLost = () => { flat.value = true; ready.value = true }
+    stage.value = s
+  } catch { if (!unmounted) { flat.value = true; ready.value = true } }
 })
-onUnmounted(() => { unmounted = true; removeEventListener('keydown', onKey); stage.value?.dispose() })
-function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close') }
+onUnmounted(() => { unmounted = true; removeEventListener('keydown', onKey); timers.forEach(clearTimeout); stage.value?.dispose() })
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') { emit('close'); return }
+  // Keep Tab inside the chest dialog.
+  if (e.key === 'Tab') {
+    const f = [...(root.value?.querySelectorAll<HTMLElement>('button:not([disabled])') || [])]
+    if (!f.length) { e.preventDefault(); return }
+    const i = f.indexOf(document.activeElement as HTMLElement)
+    if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus() }
+    else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); f[0].focus() }
+  }
+}
 
 function open() {
-  if (phase.value !== 'closed') return
+  if (phase.value !== 'closed' || !ready.value) return
   phase.value = 'opening'
   const burst = () => {
     phase.value = 'open'
     // Each card counts up as it lands.
     amounts().forEach((to, i) => {
       if (reduced()) { shown.value[i] = to; return }
-      setTimeout(() => {
+      timers.push(window.setTimeout(() => {
         const t0 = performance.now()
         const step = (now: number) => { const q = Math.min(1, (now - t0) / 500); shown.value[i] = Math.round(to * (1 - Math.pow(1 - q, 3))); if (q < 1 && !unmounted) requestAnimationFrame(step) }
         requestAnimationFrame(step)
         // Land on the exact amount even if frames were dropped.
-        setTimeout(() => { shown.value[i] = to }, 520)
-      }, 320 + i * 420)
+        timers.push(window.setTimeout(() => { shown.value[i] = to }, 520))
+      }, 320 + i * 420))
     })
     nextTick(() => root.value?.querySelector<HTMLElement>('.take')?.focus())
   }
@@ -82,7 +98,7 @@ function open() {
         </div>
       </div>
       <div class="bottom">
-        <button v-if="phase === 'closed'" class="g-btn yellow big open-btn" @click="open"><span>Открыть сундук</span></button>
+        <button v-if="phase !== 'open'" class="g-btn yellow big open-btn" :disabled="!ready || phase === 'opening'" :aria-busy="phase === 'opening'" @click="open"><span>Открыть сундук</span></button>
         <template v-else-if="phase === 'open'">
           <p class="paid">Награда уже в казне у каждого участника команды.</p>
           <button class="g-btn big take" @click="emit('close')"><span>Забрать</span></button>

@@ -101,6 +101,8 @@ export class Kit {
     m.position.set(x, 0.03, z)
     m.scale.set(sx, 1, sz)
     m.renderOrder = 1
+    // Shadows are never what the player taps.
+    m.raycast = () => {}
     p.add(m)
     return m
   }
@@ -125,6 +127,7 @@ export class Kit {
       const h = new THREE.Mesh(g, mat)
       h.scale.setScalar(1 + t / r)
       h.userData.hull = 1
+      h.raycast = () => {}
       o.add(h)
     }
   }

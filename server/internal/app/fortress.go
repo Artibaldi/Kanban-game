@@ -133,7 +133,7 @@ func (s *Server) waves(w http.ResponseWriter, r *http.Request) {
 		failErr(w, noTeam())
 		return
 	}
-	items, err := settledWaves(r.Context(), s.db, a.TeamID, 12)
+	items, err := settledWaves(r.Context(), s.db, a.TeamID, a.ID, 12)
 	if err != nil {
 		failErr(w, err)
 		return
@@ -141,10 +141,15 @@ func (s *Server) waves(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, map[string]any{"items": items})
 }
 
-func settledWaves(ctx context.Context, q dbtx, teamID string, limit int) ([]map[string]any, error) {
-	rows, err := q.Query(ctx, `SELECT id::text, starts_at, ends_at, planned_points, closed_points, overdue_count, crowns, summary, settled_at,
- COALESCE(defense_bonus, 0)::float8
- FROM waves WHERE team_id=$1 AND settled_at IS NOT NULL ORDER BY ends_at DESC LIMIT $2`, teamID, limit)
+// settledWaves lists finished waves. With a viewer, each wave carries the chest that viewer was actually paid
+// (from the ledger) and the wall repair (from the fortress events); a wave that paid nothing has no chest.
+func settledWaves(ctx context.Context, q dbtx, teamID, viewerID string, limit int) ([]map[string]any, error) {
+	rows, err := q.Query(ctx, `SELECT w.id::text, w.starts_at, w.ends_at, w.planned_points, w.closed_points, w.overdue_count, w.crowns, w.summary, w.settled_at,
+ COALESCE(w.defense_bonus, 0)::float8, l.gold, l.energy, COALESCE(fe.delta, 0)
+ FROM waves w
+ LEFT JOIN ledger l ON l.wave_id=w.id AND l.kind='wave_reward' AND l.user_id::text=$3
+ LEFT JOIN fortress_events fe ON fe.wave_id=w.id AND fe.kind='wave_repair'
+ WHERE w.team_id=$1 AND w.settled_at IS NOT NULL ORDER BY w.ends_at DESC LIMIT $2`, teamID, limit, viewerID)
 	if err != nil {
 		return nil, err
 	}
@@ -153,8 +158,14 @@ func settledWaves(ctx context.Context, q dbtx, teamID string, limit int) ([]map[
 		var starts, ends, settled time.Time
 		var planned, closed, overdue, crowns int
 		var bonus float64
-		err := row.Scan(&id, &starts, &ends, &planned, &closed, &overdue, &crowns, &summary, &settled, &bonus)
+		var gold, energy *int64
+		var repair int
+		err := row.Scan(&id, &starts, &ends, &planned, &closed, &overdue, &crowns, &summary, &settled, &bonus, &gold, &energy, &repair)
+		var chest any
+		if gold != nil && energy != nil {
+			chest = map[string]any{"gold": *gold, "energy": *energy, "repair": repair}
+		}
 		return map[string]any{"id": id, "starts_at": starts, "ends_at": ends, "planned": planned, "closed": closed,
-			"overdue": overdue, "crowns": crowns, "summary": summary, "settled_at": settled, "defense_bonus": bonus}, err
+			"overdue": overdue, "crowns": crowns, "summary": summary, "settled_at": settled, "defense_bonus": bonus, "chest": chest}, err
 	})
 }

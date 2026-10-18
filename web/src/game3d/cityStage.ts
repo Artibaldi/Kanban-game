@@ -10,7 +10,7 @@ export const CELL = 1.8
 
 export interface CityItem { id: string; type: BuildingType; level: number; x: number; y: number; busy: boolean; name: string }
 
-interface Placed { item: CityItem; holder: THREE.Group; model: THREE.Group; live: Live; scaffold?: THREE.Group; joins: string; badge: HTMLElement }
+interface Placed { item: CityItem; holder: THREE.Group; model: THREE.Group; live: Live; scaffold?: THREE.Group; joins: string; badge: HTMLElement; height: number }
 
 export class CityStage {
   private renderer: THREE.WebGLRenderer
@@ -42,6 +42,7 @@ export class CityStage {
   onPick: (id: string | null) => void = () => {}
   onCell: (x: number, y: number) => void = () => {}
   onLost: () => void = () => {}
+  onHoverCell: (c: { x: number; y: number }) => void = () => {}
 
   constructor(private canvas: HTMLCanvasElement, private labels: HTMLElement, reduced: boolean, private N: number) {
     this.kit = new Kit(reduced)
@@ -130,7 +131,9 @@ export class CityStage {
       const badge = document.createElement('div')
       badge.className = 'g3-badge city'
       this.labels.appendChild(badge)
-      const p: Placed = { item: it, holder, model, live, joins: jk, badge }
+      holder.updateMatrixWorld(true)
+      const height = new THREE.Box3().setFromObject(model).max.y - holder.position.y - this.world.position.y
+      const p: Placed = { item: it, holder, model, live, joins: jk, badge, height }
       this.placed.set(it.id, p)
       if (it.busy) this.setScaffold(p, true)
       if (animate && isNew && !k.reduced) {
@@ -152,13 +155,14 @@ export class CityStage {
   private setScaffold(p: Placed, on: boolean) {
     if (p.scaffold) { p.holder.remove(p.scaffold); p.scaffold = undefined }
     if (!on) return
-    const box = new THREE.Box3().setFromObject(p.model)
-    p.scaffold = scaffold(this.kit, Math.max(1, box.max.y - p.holder.position.y + 0.1))
+    p.scaffold = scaffold(this.kit, Math.max(1, p.height + 0.1))
     p.holder.add(p.scaffold)
   }
 
   private removePlaced(p: Placed) {
     this.world.remove(p.holder)
+    // Owned materials (glows) are freed now; shared ones stay cached in the kit.
+    p.holder.traverse(o => { const m = (o as THREE.Mesh).material; if (m && !Array.isArray(m)) this.kit.release(m) })
     p.badge.remove()
     this.placed.delete(p.item.id)
   }
@@ -174,12 +178,14 @@ export class CityStage {
   }
 
   select(id: string | null) {
+    const changed = id !== this.selected
     this.selected = id
     const p = id ? this.placed.get(id) : null
     this.selRing.visible = !!p
     if (p) {
       this.selRing.position.copy(p.holder.position).setY(0.23)
-      if (!this.kit.reduced) this.kit.tween(0.25, q => { p.model.position.y = Math.sin(q * Math.PI) * 0.35 })
+      // The little hop only when the choice changes, not on every reload.
+      if (changed && !this.kit.reduced) this.kit.tween(0.25, q => { p.model.position.y = Math.sin(q * Math.PI) * 0.35 })
     }
   }
 
@@ -225,7 +231,9 @@ export class CityStage {
     const x = Math.floor(local.x / CELL + this.N / 2), y = Math.floor(local.z / CELL + this.N / 2)
     return x >= 0 && y >= 0 && x < this.N && y < this.N ? { x, y } : null
   }
-  private onDown = (ev: PointerEvent) => { this.down = { x: ev.clientX, y: ev.clientY, px: this.pan.clone(), moved: false } }
+  private onDown = (ev: PointerEvent) => {
+    if (!ev.isPrimary || ev.button !== 0) return
+    this.down = { x: ev.clientX, y: ev.clientY, px: this.pan.clone(), moved: false } }
   private onMove = (ev: PointerEvent) => {
     const d = this.down
     if (!d) return
@@ -236,7 +244,12 @@ export class CityStage {
     this.pan.copy(d.px).addScaledVector(camRight, -dx * k).add(new THREE.Vector3(-1, 0, -1).normalize().multiplyScalar((dy * k) / Math.sin(ELEV)))
     this.pan.clampLength(0, this.N * CELL * 0.45)
   }
-  private onHover = (ev: PointerEvent) => { if (this.placing && !this.down?.moved) this.setCursor(this.cellAt(ev.clientX, ev.clientY)) }
+  private onHover = (ev: PointerEvent) => {
+    if (!this.placing || this.down?.moved) return
+    const c = this.cellAt(ev.clientX, ev.clientY)
+    this.setCursor(c)
+    if (c) this.onHoverCell(c)
+  }
   private onUp = (ev: PointerEvent) => {
     const d = this.down
     this.down = null
@@ -308,8 +321,7 @@ export class CityStage {
     this.renderer.render(this.scene, c)
     for (const p of this.placed.values()) {
       if (p.badge.style.display === 'none') continue
-      const box = new THREE.Box3().setFromObject(p.model)
-      const [x, y] = this.toScreen(new THREE.Vector3(p.holder.position.x, box.max.y + 0.3, p.holder.position.z))
+      const [x, y] = this.toScreen(new THREE.Vector3(p.holder.position.x, p.holder.position.y + p.height + 0.3, p.holder.position.z))
       p.badge.style.transform = `translate(${x}px,${y}px) translate(-50%,-100%)`
     }
   }
