@@ -346,8 +346,13 @@ func TestAdminTeamsAndSeed(t *testing.T) {
 	}
 	alexey := login(t, ts, "alexey")
 	alexey.refused("forbidden", "PATCH", "/admin/teams/"+id, map[string]any{"wave_weeks": 1})
-	if n := len(items(alexey.must(200, "GET", "/waves", nil, ""))); n < 3 {
-		t.Fatalf("seeded past waves: %d", n)
+	ws := items(alexey.must(200, "GET", "/waves", nil, ""))
+	if len(ws) < 3 {
+		t.Fatalf("seeded past waves: %d", len(ws))
+	}
+	// The chest ceremony shows what was paid, so it needs the wave's defence bonus.
+	if b, ok := ws[0]["defense_bonus"].(float64); !ok || b < 0 || b > 0.2 {
+		t.Fatalf("defense_bonus: %v", ws[0])
 	}
 	var hp int
 	_ = pool.QueryRow(context.Background(), `SELECT hp FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp)

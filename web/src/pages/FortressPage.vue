@@ -6,6 +6,7 @@ import GameOff from '../components/GameOff.vue'
 import GameCrown from '../components/GameCrown.vue'
 import FortressScene from '../components/FortressScene.vue'
 import FortressScene3D from '../components/FortressScene3D.vue'
+import WaveChest from '../components/WaveChest.vue'
 import { api, type ApiError } from '../api'
 import { crownsText, daysLeftText, enemyName, enemyRows, waveProgress } from '../lib/fortress'
 import { date, dateTime, plural } from '../lib/format'
@@ -30,6 +31,7 @@ const busy = ref(false)
 const scene = ref<InstanceType<typeof FortressScene3D>>()
 const waveBar = ref<HTMLElement>()
 const glint = ref(false)
+const chestOpen = ref(false)
 
 // Only the newest response counts: a slow periodic refresh must not bring back an enemy that just fell.
 let loadSeq = 0
@@ -129,15 +131,18 @@ function select(id: string | null) {
 function closePanel() { selectedId.value = null; opener?.focus?.(); opener = null }
 function onKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
+  if (chestOpen.value) return
   if (battle.value?.done) closeBattle()
   else if (selectedId.value) closePanel()
 }
 onMounted(() => addEventListener('keydown', onKey))
 onUnmounted(() => removeEventListener('keydown', onKey))
 const chest = computed(() => {
-  const s = game.config?.settings, c = battle.value?.wave.crowns ?? 0
-  if (!s) return null
-  return { gold: s.wave_chest_gold[c] ?? 0, energy: s.wave_chest_energy[c] ?? 0, repair: c >= 3 ? 100 : s.repair_by_crowns[c] ?? 0 }
+  const s = game.config?.settings, w = battle.value?.wave, c = w?.crowns ?? 0
+  if (!s || !w) return null
+  // The same formula as the server's WaveChest: base by crowns, plus the wave's defence bonus.
+  const k = 1 + (w.defense_bonus || 0)
+  return { gold: Math.round((s.wave_chest_gold[c] ?? 0) * k), energy: Math.round((s.wave_chest_energy[c] ?? 0) * k), repair: c >= 3 ? 100 : s.repair_by_crowns[c] ?? 0 }
 })
 const resultTitle = computed(() => {
   const c = battle.value?.wave.crowns ?? 0
@@ -210,10 +215,11 @@ const resultTitle = computed(() => {
               <div><Icon name="zap" :size="16" />+{{ chest.energy }}</div>
               <div><Icon name="shield" :size="16" />{{ chest.repair >= 100 ? 'стены как новые' : `+${chest.repair}% стенам` }}</div>
             </div>
-            <p class="note">Сундук команды получает каждый участник; бонус обороны добавляет до 20%. {{ battle.wave.crowns === 0 ? 'Без короны стены не чинятся — следующая волна начнётся с трещинами.' : '' }}</p>
+            <p class="note">Сундук команды получает каждый участник{{ battle.wave.defense_bonus ? `, с бонусом обороны +${Math.round(battle.wave.defense_bonus * 100)}%` : '' }}. {{ battle.wave.crowns === 0 ? 'Без короны стены не чинятся — следующая волна начнётся с трещинами.' : '' }}</p>
             <div class="row-btns">
               <button class="g-btn blue" @click="startBattle(battle.wave)"><span>Ещё раз</span></button>
-              <button class="g-btn" @click="closeBattle"><span>Готово</span></button>
+              <button v-if="battle.wave.crowns > 0 && chest" class="g-btn yellow" @click="chestOpen = true"><span>Открыть сундук</span></button>
+              <button v-else class="g-btn" @click="closeBattle"><span>Готово</span></button>
             </div>
           </div>
         </div>
@@ -242,6 +248,8 @@ const resultTitle = computed(() => {
           </div>
         </div>
       </section>
+
+      <WaveChest v-if="chestOpen && chest && battle" :gold="chest.gold" :energy="chest.energy" :repair="chest.repair" :crowns="battle.wave.crowns" @close="chestOpen = false; closeBattle()" />
 
       <!-- The same horde for screen readers and keyboards: the 3D scene is decorative. -->
       <section class="sr-only" aria-label="Враги на поле">

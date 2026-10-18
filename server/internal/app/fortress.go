@@ -142,7 +142,8 @@ func (s *Server) waves(w http.ResponseWriter, r *http.Request) {
 }
 
 func settledWaves(ctx context.Context, q dbtx, teamID string, limit int) ([]map[string]any, error) {
-	rows, err := q.Query(ctx, `SELECT id::text, starts_at, ends_at, planned_points, closed_points, overdue_count, crowns, summary, settled_at
+	rows, err := q.Query(ctx, `SELECT id::text, starts_at, ends_at, planned_points, closed_points, overdue_count, crowns, summary, settled_at,
+ COALESCE(defense_bonus, 0)::float8
  FROM waves WHERE team_id=$1 AND settled_at IS NOT NULL ORDER BY ends_at DESC LIMIT $2`, teamID, limit)
 	if err != nil {
 		return nil, err
@@ -151,8 +152,9 @@ func settledWaves(ctx context.Context, q dbtx, teamID string, limit int) ([]map[
 		var id, summary string
 		var starts, ends, settled time.Time
 		var planned, closed, overdue, crowns int
-		err := row.Scan(&id, &starts, &ends, &planned, &closed, &overdue, &crowns, &summary, &settled)
+		var bonus float64
+		err := row.Scan(&id, &starts, &ends, &planned, &closed, &overdue, &crowns, &summary, &settled, &bonus)
 		return map[string]any{"id": id, "starts_at": starts, "ends_at": ends, "planned": planned, "closed": closed,
-			"overdue": overdue, "crowns": crowns, "summary": summary, "settled_at": settled}, err
+			"overdue": overdue, "crowns": crowns, "summary": summary, "settled_at": settled, "defense_bonus": bonus}, err
 	})
 }

@@ -103,7 +103,7 @@ export interface Enemy {
 }
 export interface WaveSummary {
   id: string; starts_at?: string; ends_at: string; planned?: number; closed?: number; overdue?: number
-  crowns: number; summary: string; settled_at?: string
+  crowns: number; summary: string; settled_at?: string; defense_bonus?: number
 }
 export interface FortressState { fortress: Fortress; wave: WaveNow; enemies: Enemy[]; fog: number; last_wave: WaveSummary | null }
 export interface MyProgress { weeks: string[]; weekly: number[]; this_week: number; best_week: number; total: number; explanation: string }
