@@ -72,6 +72,8 @@ const art = computed(() => {
     case 'workshop': shapes.push(...prism(cx, cy, 20, 13, v('stone-light'), v('stone'), v('stone-dark')), ...roof(cx, cy, 20, 13, 9, '#9aa6ba', '#7d8ba3')); topY = cy - 34; break
     case 'mortar': shapes.push(...prism(cx, cy, 18, 8, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 8, 7, 12, '#5a5e6a', '#4a4e5a', '#3c3f48')); topY = cy - 26; break
     case 'trap': shapes.push(...prism(cx, cy, 16, 2, v('wood-light'), v('wood'), v('wood-dark'))); topY = cy - 4; break
+    case 'stable': shapes.push(...prism(cx, cy, 24, 10, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 24, 10, 8, v('gold'), v('gold-dark'))); topY = cy - 30; break
+    case 'crossbow': shapes.push(...prism(cx, cy, 13, 30, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 30, 16, 3, '#9aa6ba', '#7d8ba3', '#5d6b83')); topY = cy - 42; break
     // Decor in the flat view: small and simple.
     case 'road': shapes.push(...prism(cx, cy, 26, 2, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 4; break
     case 'pond': shapes.push(...prism(cx, cy, 24, 3, '#4db4f0', v('stone'), v('stone-dark'))); topY = cy - 5; break

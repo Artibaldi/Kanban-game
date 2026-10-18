@@ -18,7 +18,7 @@ const game = useGame()
 const session = useSession()
 const toasts = useToasts()
 const army = ref<Army | null>(null)
-const counts = ref<Record<string, number>>({ guard: 1, raider: 1, archer: 1, ram: 1 })
+const counts = ref<Record<string, number>>({ guard: 1, raider: 1, archer: 1, rider: 1, ram: 1 })
 const busy = ref('')
 const now = ref(Date.now())
 const flat = ref(false)
@@ -144,7 +144,7 @@ const qProgress = (q: QueueItem) => {
 
     <section v-if="army" class="g-panel workshop" aria-labelledby="ws-title">
       <span class="g-ribbon gold"><b id="ws-title">Мастерская</b></span>
-      <p class="empty">Каждый уровень отряда: +10% здоровья и атаки. Улучшение идёт одно за раз; уровень мастерской открывает следующий уровень войск (до {{ army.max_troop_level }}).</p>
+      <p class="empty">Каждый уровень отряда: +10% здоровья и атаки. Улучшение идёт одно за раз; уровень мастерской открывает следующий уровень войск<template v-if="army.max_troop_level > 1"> (сейчас до {{ army.max_troop_level }})</template>.</p>
       <div v-if="army.research" class="slot">
         <Portrait3D :troop="army.research.type" :size="48" />
         <div class="grow">
@@ -197,6 +197,7 @@ const qProgress = (q: QueueItem) => {
 .troops { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; margin: 26px 0 40px; }
 .tcard { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 14px; border: 3px solid var(--g-ink); border-radius: 18px; background: var(--g-panel); color: #3a2410; box-shadow: inset 0 0 0 3px #fff6dd, 0 6px 0 #3e2914, 0 6px 0 3px var(--g-ink); overflow: hidden; }
 .hd { display: flex; align-items: center; justify-content: space-between; margin: 0 -16px; padding: 8px 14px 10px; border-bottom: 3px solid var(--g-ink); background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); font-size: 19px; }
+.rider .hd { background: linear-gradient(#a9c8ff, #3e6fd0 55%, #2c4fa0); }
 .archer .hd { background: linear-gradient(#9fd67a, #4f9a3a 55%, #356e27); }
 .lv { margin-left: 6px; font-size: 0.8em; opacity: 0.9; }
 .workshop { display: flex; flex-direction: column; gap: 8px; }

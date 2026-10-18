@@ -58,7 +58,7 @@ const hp = computed(() => {
   if (!d) return []
   return [
     { key: 'wall', name: 'Стены', max: d.wall_hp, now: r ? r.wall_hp : d.wall_hp },
-    { key: 'tower', name: d.mortars ? 'Башни и мортиры' : 'Башни', max: d.tower_hp, now: r ? r.tower_hp : d.tower_hp },
+    { key: 'tower', name: d.mortars || d.crossbows ? 'Башни и орудия' : 'Башни', max: d.tower_hp, now: r ? r.tower_hp : d.tower_hp },
     { key: 'townhall', name: 'Ратуша', max: d.townhall_hp, now: r ? r.townhall_hp : d.townhall_hp },
     { key: 'other', name: 'Остальные здания', max: d.other_hp, now: r ? r.other_hp : d.other_hp },
   ].filter(h => h.max > 0)
@@ -67,7 +67,7 @@ const hp = computed(() => {
 const ruinedTypes = computed<BuildingType[]>(() => {
   if (!start.value) return []
   const out: BuildingType[] = []
-  for (const p of ruinedAt(start.value, stateAt(step.value), eventsUpTo(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage', 'tavern', 'hut', 'market', 'well', 'archery', 'workshop'] as BuildingType[]) : p === 'tower' ? (['tower', 'mortar'] as BuildingType[]) : [p as BuildingType]))
+  for (const p of ruinedAt(start.value, stateAt(step.value), eventsUpTo(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage', 'tavern', 'hut', 'market', 'well', 'archery', 'workshop', 'stable'] as BuildingType[]) : p === 'tower' ? (['tower', 'mortar', 'crossbow'] as BuildingType[]) : [p as BuildingType]))
   return out
 })
 
@@ -129,6 +129,7 @@ function roundText(r: Battle['rounds'][number]) {
   const killed = Object.entries(r.killed).filter(([, n]) => n > 0).map(([k, n]) => `${game.troop(k)?.name || k} × ${n}`).join(', ')
   // Kills come from towers, mortars and traps together, so they are listed on their own.
   const parts = [`Башни нанесли ${r.tower_damage} урона.`]
+  if (r.crossbow_damage) parts.push(`Арбалеты: ${r.crossbow_damage} урона, в первую очередь по таранам и всадникам.`)
   if (r.mortar_damage) parts.push(`Мортиры: ${r.mortar_damage} урона по площади.`)
   if (r.trap_damage) parts.push(`Ловушки: ${r.trap_damage} урона.`)
   if (r.wall_damage) parts.push(`Урон стенам: ${r.wall_damage}.`)

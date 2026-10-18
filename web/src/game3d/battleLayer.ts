@@ -9,7 +9,7 @@ import type { CityStage } from './cityStage'
 import { animateTroop, troopModel } from './troops'
 
 // Decor is not part of a defence: it is never a target and never in ruins.
-const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other', archery: 'other', workshop: 'other', mortar: 'tower' }
+const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other', archery: 'other', workshop: 'other', mortar: 'tower', stable: 'other', crossbow: 'tower' }
 
 interface Fig { type: string; g: THREE.Group; ph: number; alive: boolean; target: string | null; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number }
 interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; sy: number }
@@ -80,7 +80,9 @@ export class BattleLayer {
     const behind = this.city.entries().filter(e => { const p = partOf[e.type]; return p && p !== 'wall' && !this.ruins.has(e.id) })
     for (const f of this.figs) {
       if (!f.alive) continue
-      const pool = f.type === 'archer' && target === 'wall' ? behind : targets
+      // Riders ride around the walls straight for the towers (or what is left behind the walls).
+      const towersUp = behind.filter(e => partOf[e.type] === 'tower')
+      const pool = f.type === 'rider' && target === 'wall' ? (towersUp.length ? towersUp : behind) : f.type === 'archer' && target === 'wall' ? behind : targets
       let best: (typeof targets)[number] | null = null, bd = Infinity
       for (const e of pool) { const d = e.holder.position.distanceTo(f.g.position); if (d < bd) { bd = d; best = e } }
       f.target = best?.id ?? null
@@ -97,7 +99,16 @@ export class BattleLayer {
       f.t = 0
       f.dur = dur * 0.6
     }
-    // Standing towers shoot back at the squad.
+    // Standing towers shoot back at the squad; crossbow towers aim at the heavy figures first.
+    const heavy = this.figs.filter(f => f.alive && (f.type === 'ram' || f.type === 'rider'))
+    for (const cb of this.city.entries().filter(e => e.type === 'crossbow' && !this.ruins.has(e.id))) for (let n = 0; n < 2; n++) {
+      const pick = heavy.length ? heavy : this.figs.filter(f => f.alive)
+      if (!pick.length) break
+      const f = pick[Math.floor(rand() * pick.length)]
+      const from = cb.holder.position.clone().setY(cb.height + 0.2)
+      const m = k.mk(k.rb(0.06, 0.06, 0.6, 0.01), k.MB(0x5a3418), from.x, from.y, from.z, this.city.group)
+      this.shots.push({ m, from, to: f.g.position.clone().setY(0.6), t: -n * 0.4 - rand() * 0.2, arc: 0.4 })
+    }
     const towers = this.city.entries().filter(e => e.type === 'tower' && !this.ruins.has(e.id))
     const living = this.figs.filter(f => f.alive)
     for (const t of towers) for (let n = 0; n < 2 && living.length; n++) {

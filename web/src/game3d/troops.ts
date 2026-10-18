@@ -1,5 +1,5 @@
 // The player's troops: Страж (shield and spear), Налётчик (two blades, red hood), Лучник (green hood, longbow),
-// Таран (iron-headed ram on wheels).
+// Всадник (a knight on a pony, lance and pennant), Таран (iron-headed ram on wheels).
 // Same toy style as the horde, but in the team's blue and gold so friend and foe never look alike.
 import * as THREE from 'three'
 import { Kit, rand } from './kit'
@@ -97,6 +97,36 @@ function archer(k: Kit) {
   return g
 }
 
+function rider(k: Kit) {
+  const g = new THREE.Group(), rig = k.grp(g)
+  // The pony: a round body, four short legs, a neck and a mane; the rig carries both so they gallop together.
+  const HORSE = 0x9a6436, HORSE_D = 0x6e4422
+  k.mk(k.caps(0.26, 0.55), k.M(HORSE), 0, 0.55, 0, rig).rotation.x = Math.PI / 2
+  for (const [x, z] of [[-0.16, 0.28], [0.16, 0.28], [-0.16, -0.28], [0.16, -0.28]]) k.mk(k.caps(0.07, 0.28), k.M(HORSE_D), x, 0.2, z, rig)
+  const neck = k.grp(rig, 0, 0.78, 0.38)
+  neck.rotation.x = 0.5
+  k.mk(k.caps(0.13, 0.28), k.M(HORSE), 0, 0.12, 0, neck)
+  k.mk(k.rb(0.2, 0.22, 0.34, 0.08), k.M(HORSE), 0, 0.32, 0.12, neck)
+  k.mk(k.rb(0.06, 0.34, 0.12, 0.03), k.M(0x3a2414), 0, 0.2, -0.1, neck)
+  k.mk(k.rb(0.5, 0.05, 0.5, 0.02), k.M(BLUE_D), 0, 0.82, -0.02, rig)
+  // The rider.
+  k.mk(k.rb(0.36, 0.38, 0.28, 0.12), k.M(BLUE), 0, 1.04, -0.05, rig)
+  k.mk(k.rb(0.4, 0.06, 0.32, 0.02), k.M(GOLD), 0, 0.88, -0.05, rig)
+  const head = k.grp(rig, 0, 1.42, -0.05)
+  k.mk(k.sph(0.2), k.M(SKIN), 0, 0, 0, head)
+  k.mk(k.sph(0.22, 14, 10), k.M(STEEL), 0, 0.06, -0.02, head).scale.set(1, 0.8, 1)
+  k.mk(k.cone(0.05, 0.22, 6), k.M(0xd0453a), 0, 0.28, -0.04, head)
+  const ey = eyes(k, head, 0.07, 0, 0.17, 0.05)
+  const arm = k.grp(rig, 0.26, 1.05, 0.05)
+  arm.rotation.x = 1.25
+  k.mk(k.cyl(0.03, 0.03, 1.3, 6), k.M(WOOD), 0, 0.45, 0, arm)
+  k.mk(k.cone(0.06, 0.26, 6), k.M(STEEL), 0, 1.2, 0, arm)
+  const pen = k.mk(k.rb(0.02, 0.14, 0.22, 0.01), k.M(GOLD), 0, 0.95, -0.12, arm)
+  pen.userData.noOL = 1
+  g.userData = { rig, head, eyes: ey, arms: [arm], h: 1.7 } satisfies Rig
+  return g
+}
+
 function ram(k: Kit) {
   const g = new THREE.Group(), rig = k.grp(g)
   // A covered frame on four wheels with a swinging iron-headed log.
@@ -124,8 +154,8 @@ function ram(k: Kit) {
   return g
 }
 
-export type TroopType = 'guard' | 'raider' | 'archer' | 'ram'
-const builders: Record<TroopType, (k: Kit) => THREE.Group> = { guard, raider, archer, ram }
+export type TroopType = 'guard' | 'raider' | 'archer' | 'rider' | 'ram'
+const builders: Record<TroopType, (k: Kit) => THREE.Group> = { guard, raider, archer, rider, ram }
 
 /** troopModel: one soldier with its outline; unknown types become guards. */
 export function troopModel(k: Kit, type: string): THREE.Group {
@@ -153,8 +183,10 @@ export function animateTroop(g: THREE.Group, type: string, t: number, phase: num
   u.rig.rotation.z = Math.sin(t * (walk ? 4.5 : 1.7) + phase) * (walk ? 0.07 : 0.04)
   u.head.rotation.y = Math.sin(t * 0.9 + phase) * 0.25
   const a = u.arms?.[u.arms.length - 1]
-  if (a && mode === 'attack') a.rotation.x = -Math.abs(Math.sin(t * 7 + phase)) * 1.3
-  else if (a) a.rotation.x = 0
+  // The rider's lance stays couched forward; a thrust instead of a swing.
+  const rest = type === 'rider' ? 1.25 : 0
+  if (a && mode === 'attack') a.rotation.x = rest - Math.abs(Math.sin(t * 7 + phase)) * (type === 'rider' ? 0.3 : 1.3)
+  else if (a) a.rotation.x = rest
   if (u.eyes) u.eyes.forEach(e => (e.scale.y = Math.sin(t * 0.7 + phase * 3) > 0.985 ? 0.15 : 1))
 }
 
