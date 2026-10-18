@@ -1,5 +1,6 @@
 // Work-layer helpers: what the board and the review queue show around the tasks. No game rules here.
 import { isOverdue } from './format.ts'
+import { rewardPreview } from './board.ts'
 import type { Task, TaskState } from '../types.ts'
 
 /** initials: the first letters of the first two words, for avatars. */
@@ -54,4 +55,13 @@ export function waitText(since: string, now = new Date()) {
   const h = Math.floor(min / 60)
   if (h < 24) return `ждёт ${h} ч`
   return `ждёт ${Math.floor(h / 24)} дн`
+}
+
+type RewardSettings = Parameters<typeof rewardPreview>[2]
+
+/** cardReward: the gold chip on a card — what was paid for a done task, the server's formula preview before that. */
+export function cardReward(t: Task, s: RewardSettings | null | undefined, now = new Date()): number | null {
+  if (t.reward) return t.reward.gold
+  if (!s || t.state === 'backlog' || t.state === 'done') return null
+  return rewardPreview(t.points, t.priority, s, !!t.due_date && !isOverdue(t.due_date, now)).gold
 }
