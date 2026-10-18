@@ -48,6 +48,9 @@ const eventsUpTo = (i: number) => (b.value?.rounds.slice(0, i).flatMap(r => r.ev
 const stateAt = (i: number) => (!b.value || i <= 0 ? start.value! : b.value.rounds[i - 1])
 const cur = computed(() => (b.value && step.value > 0 ? b.value.rounds[step.value - 1] : null))
 const shown = computed(() => Object.fromEntries(Object.entries(b.value?.army || {}).map(([k, n]) => [k, shownCount(n)])))
+// The defender's garrison (colleagues' troops on the banner): its hit points and a few figures to stand for it.
+const garrison0 = computed(() => Object.entries(b.value?.defense.garrison || {}).reduce((sum, [k, n]) => sum + (game.troop(k)?.hp || 0) * n, 0))
+const garrisonShown = computed(() => Object.fromEntries(Object.entries(b.value?.defense.garrison || {}).map(([k, n]) => [k, shownCount(n, 4)])))
 const done = computed(() => !!b.value && step.value >= b.value.rounds.length && !playing.value)
 const destruction = computed(() => (!b.value ? 0 : done.value ? b.value.destruction : destructionAt(start.value!, stateAt(step.value))))
 const alive = computed(() => (cur.value ? cur.value.alive : b.value?.army || {}))
@@ -62,6 +65,7 @@ const hp = computed(() => {
     { key: 'tower', name: d.mortars || d.crossbows ? 'Башни и орудия' : 'Башни', max: d.tower_hp, now: r ? r.tower_hp : d.tower_hp },
     { key: 'townhall', name: 'Ратуша', max: d.townhall_hp, now: r ? r.townhall_hp : d.townhall_hp },
     { key: 'other', name: 'Остальные здания', max: d.other_hp, now: r ? r.other_hp : d.other_hp },
+    { key: 'garrison', name: 'Подкрепления', max: garrison0.value, now: r ? r.garrison_hp ?? 0 : garrison0.value },
   ].filter(h => h.max > 0)
 })
 // The flat fallback greys out ruined buildings the old way.
@@ -75,7 +79,7 @@ const ruinedTypes = computed<BuildingType[]>(() => {
 function beat(i: number, dur: number) {
   const r = stateAt(i), round = b.value!.rounds[i - 1]
   const figs = Object.fromEntries(Object.entries(b.value!.army).map(([k, n]) => [k, aliveShown(round.alive[k] ?? 0, n, shown.value[k])]))
-  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000, { mortar: !!round.mortar_damage, crossbow: !!round.crossbow_damage, trap: round.events.includes('trap_sprung') })
+  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000, { mortar: !!round.mortar_damage, crossbow: !!round.crossbow_damage, trap: round.events.includes('trap_sprung'), garrison: garrison0.value ? (round.garrison_hp ?? 0) / garrison0.value : undefined })
 }
 function play() {
   if (!b.value) return
@@ -85,7 +89,7 @@ function play() {
   if (reduced() || flat.value || !ready.value) { finish(); return }
   playing.value = true
   scene.value?.clear()
-  scene.value?.start(b.value.army, shown.value)
+  scene.value?.start(b.value.army, shown.value, garrisonShown.value)
   const next = () => {
     if (!b.value) return
     if (step.value >= b.value.rounds.length) { playing.value = false; scene.value?.cheer(); dropStars(); return }
@@ -101,7 +105,7 @@ function finish() {
   if (!b.value) return
   const n = b.value.rounds.length
   if (ready.value && n) {
-    if (step.value === 0) { scene.value?.clear(); scene.value?.start(b.value.army, shown.value) }
+    if (step.value === 0) { scene.value?.clear(); scene.value?.start(b.value.army, shown.value, garrisonShown.value) }
     step.value = n
     beat(n, 10)
     // The fight is over: no more swings or trembling behind the result.
@@ -123,7 +127,7 @@ function onReady() {
   else finish()
 }
 
-const eventText: Record<string, string> = { wall_breached: 'Стены пробиты', towers_down: 'Башни разрушены', townhall_down: 'Ратуша пала', trap_sprung: 'Сработали ловушки' }
+const eventText: Record<string, string> = { wall_breached: 'Стены пробиты', towers_down: 'Башни разрушены', townhall_down: 'Ратуша пала', trap_sprung: 'Сработали ловушки', garrison_down: 'Подкрепления разбиты' }
 function roundText(r: Battle['rounds'][number]) {
   // In a friendly duel nobody dies: they are out of this battle and come back home.
   const fell = friendly.value ? 'выбыли из боя' : 'погибли'
@@ -133,6 +137,8 @@ function roundText(r: Battle['rounds'][number]) {
   if (r.crossbow_damage) parts.push(`Арбалеты: ${r.crossbow_damage} урона, в первую очередь по таранам и всадникам.`)
   if (r.mortar_damage) parts.push(`Мортиры: ${r.mortar_damage} урона по площади.`)
   if (r.trap_damage) parts.push(`Ловушки: ${r.trap_damage} урона.`)
+  if (r.garrison_damage) parts.push(`Подкрепления со знамени ударили на ${r.garrison_damage}.`)
+  if (r.garrison_hit) parts.push(`Урон подкреплениям: ${r.garrison_hit}.`)
   if (r.wall_damage) parts.push(`Урон стенам: ${r.wall_damage}.`)
   if (r.tower_hit) parts.push(`Урон башням: ${r.tower_hit}.`)
   if (r.base_damage) parts.push(`Урон зданиям: ${r.base_damage}.`)

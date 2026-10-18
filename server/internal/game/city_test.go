@@ -1,6 +1,7 @@
 package game
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -42,7 +43,7 @@ func TestDecorIsLooksOnly(t *testing.T) {
 	}
 	plain := DefenseOf(city(Building{Type: "townhall", Level: 1, X: 7, Y: 7}))
 	decorated := DefenseOf(city(Building{Type: "townhall", Level: 1, X: 7, Y: 7}, Building{Type: "pond", Level: 1, X: 3, Y: 3}, Building{Type: "road", Level: 1, X: 4, Y: 3}))
-	if plain != decorated {
+	if !reflect.DeepEqual(plain, decorated) {
 		t.Fatalf("decor never changes the defence: %+v vs %+v", plain, decorated)
 	}
 }

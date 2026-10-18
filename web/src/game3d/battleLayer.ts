@@ -9,7 +9,7 @@ import type { CityStage } from './cityStage'
 import { animateTroop, troopModel } from './troops'
 
 // Decor is not part of a defence: it is never a target and never in ruins.
-const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other', archery: 'other', workshop: 'other', mortar: 'tower', stable: 'other', crossbow: 'tower' }
+const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other', archery: 'other', workshop: 'other', mortar: 'tower', stable: 'other', crossbow: 'tower', banner: 'other' }
 
 interface Fig { type: string; g: THREE.Group; ph: number; alive: boolean; target: string | null; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number }
 interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; sy: number }
@@ -21,6 +21,8 @@ export class BattleLayer {
   private shots: { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; arc: number; boom?: boolean }[] = []
   private smokeT = 0
   private puffs: { m: THREE.Mesh; life: number }[] = []
+  /** The garrison: colleagues' troops from the defender's banner, standing guard around the town hall. */
+  private defenders: { type: string; g: THREE.Group; ph: number; alive: boolean }[] = []
   /** Trap spikes still on the field; a replay or a skip must not leave them behind. */
   private spikes: THREE.Group[] = []
   private target: Part | null = null
@@ -31,10 +33,22 @@ export class BattleLayer {
     city.onFrame = (dt, t) => this.frame(dt, t)
   }
 
-  /** start: the squad lines up at the front edge of the island. */
-  start(squad: Record<string, number>, shown: Record<string, number>) {
+  /** start: the squad lines up at the front edge of the island; the garrison (shown figures per type) at the town hall. */
+  start(squad: Record<string, number>, shown: Record<string, number>, garrison: Record<string, number> = {}) {
     this.clear()
     const k = this.city.toolkit, edge = this.city.size / 2 + 1.4
+    const hall = this.city.entries().find(e => e.type === 'townhall')
+    const ring = Object.entries(garrison).flatMap(([type, n]) => Array.from({ length: n }, () => type))
+    ring.forEach((type, j) => {
+      const a = (j / Math.max(1, ring.length)) * Math.PI * 2, c = hall?.holder.position ?? new THREE.Vector3()
+      const g = troopModel(k, type)
+      g.scale.setScalar(type === 'ram' ? 0.7 : 0.85)
+      k.blob(g, 0, 0, 0.7, 0.7, 0.4)
+      g.position.set(c.x + Math.cos(a) * 1.7, 0.21, c.z + Math.sin(a) * 1.7)
+      g.rotation.y = Math.atan2(Math.cos(a), Math.sin(a)) // facing outward
+      this.city.group.add(g)
+      this.defenders.push({ type, g, ph: rand() * 6, alive: true })
+    })
     let i = 0
     const total = Object.values(shown).reduce((a, b) => a + b, 0)
     for (const [type, n] of Object.entries(shown)) {
@@ -57,7 +71,7 @@ export class BattleLayer {
    * round: one beat. `target` is the part this round hit, `ruined` what lies in ruins after it,
    * `alive` how many figures of each type still stand; `fx` says whether mortars fired and traps sprang this round.
    */
-  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx: { mortar: boolean; trap: boolean; crossbow?: boolean } = { mortar: false, trap: false }) {
+  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx: { mortar: boolean; trap: boolean; crossbow?: boolean; garrison?: number } = { mortar: false, trap: false }) {
     this.target = target
     this.entries = null
     const k = this.city.toolkit
@@ -70,6 +84,17 @@ export class BattleLayer {
         const p = f.g.position.clone(), g = f.g
         k.tween(0.2, q => { g.rotation.x = (-Math.PI / 2) * eIn(q) }, undefined, 'duel')
         k.wait(0.25, () => { k.poof(this.city.group, p.setY(0.6), 0.7, 3); this.city.group.remove(g) }, 'duel')
+      }
+    }
+    // The garrison wears down: as many defenders stand as its share of hit points left.
+    if (fx.garrison !== undefined) {
+      const up = this.defenders.filter(d => d.alive)
+      const keep = fx.garrison > 0 ? Math.max(1, Math.round(fx.garrison * this.defenders.length)) : 0
+      for (const d of up.slice(0, Math.max(0, up.length - keep))) {
+        d.alive = false
+        const g = d.g, p = g.position.clone()
+        k.tween(0.2, q => { g.rotation.x = (-Math.PI / 2) * eIn(q) }, undefined, 'duel')
+        k.wait(0.25, () => { k.poof(this.city.group, p.setY(0.6), 0.6, 3); this.city.group.remove(g) }, 'duel')
       }
     }
     // Ruins.
@@ -197,6 +222,7 @@ export class BattleLayer {
         this.shots.splice(i, 1)
       }
     }
+    for (const d of this.defenders) if (d.alive) animateTroop(d.g, d.type, t, d.ph, this.target ? 'attack' : 'idle')
     // Smoke rises from the ruins.
     this.smokeT += dt
     if (this.smokeT > 0.6 && this.ruins.size) {
@@ -240,6 +266,7 @@ export class BattleLayer {
     for (const s of this.shots) this.city.group.remove(s.m)
     for (const p of this.puffs) { this.city.group.remove(p.m); this.city.toolkit.release(p.m.material as THREE.Material) }
     for (const s of this.spikes) this.city.group.remove(s)
+    for (const d of this.defenders) this.city.group.remove(d.g)
     for (const e of this.city.entries()) {
       const r = this.ruins.get(e.id)
       if (!r) continue
@@ -248,6 +275,6 @@ export class BattleLayer {
       e.model.rotation.z = r.rot
       e.model.position.x = 0
     }
-    this.figs = []; this.shots = []; this.puffs = []; this.spikes = []; this.ruins.clear(); this.target = null
+    this.figs = []; this.shots = []; this.puffs = []; this.spikes = []; this.defenders = []; this.ruins.clear(); this.target = null
   }
 }

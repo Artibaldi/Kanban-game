@@ -118,6 +118,10 @@ func settleWave(ctx context.Context, tx pgx.Tx, w waveRow, now time.Time) error 
 		if err != nil {
 			return err
 		}
+		// Locked first: troops moving between banners mid-count could otherwise be counted twice.
+		if err = lockPlayers(ctx, tx, members...); err != nil {
+			return err
+		}
 		if bonus, err = teamDefenseBonus(ctx, tx, st, members); err != nil {
 			return err
 		}
@@ -154,7 +158,7 @@ func teamDefenseBonus(ctx context.Context, q dbtx, st game.Settings, members []s
 	}
 	var total int64
 	for _, id := range members {
-		city, err := loadCity(ctx, q, id)
+		defense, err := defenseOfPlayer(ctx, q, id)
 		if err != nil {
 			return 0, err
 		}
@@ -162,7 +166,7 @@ func teamDefenseBonus(ctx context.Context, q dbtx, st game.Settings, members []s
 		if err != nil {
 			return 0, err
 		}
-		total += game.DefenseScore(game.DefenseOf(city), army)
+		total += game.DefenseScore(defense, army)
 	}
 	return game.DefenseBonus(st, total/int64(len(members))), nil
 }
