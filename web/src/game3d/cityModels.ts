@@ -8,7 +8,7 @@ import { GOLD, ROOF, STONE, STONE_D, STONE_L, WOOD, WOOD_D } from './fortressWor
 export const STRAW = 0xe2b65a, STRAW_D = 0xc9973d, TILE = 0xd0603f, METAL = 0x7d8ba3, BARRACKS_RED = 0xc8463a
 
 /** Animated parts of a building: chimney markers (smoke rises from them) and the citadel crystal. */
-export interface Live { smoke: THREE.Object3D[]; crystal?: { c: THREE.Object3D; gl: THREE.Sprite } }
+export interface Live { smoke: THREE.Object3D[]; crystal?: { c: THREE.Object3D; gl: THREE.Sprite }; glows?: THREE.Sprite[] }
 
 const trimOf = (level: number) => (level >= 5 ? GOLD : level >= 4 ? METAL : null)
 
@@ -164,6 +164,59 @@ function tavern(k: Kit, g: THREE.Group, level: number) {
   }
 }
 
+/** Decor: road pavers that join their neighbours, trees, a flower bed, a lantern, a pond. Looks only. */
+function road(k: Kit, g: THREE.Group, joins: { e: boolean; s: boolean }) {
+  k.mk(k.rb(1.5, 0.06, 1.5, 0.04), k.M(0xc9b48c), 0, 0.04, 0, g)
+  // Paving stones in a loose grid; a link half-way toward each east/south neighbour.
+  for (let i = 0; i < 9; i++) k.mk(k.rb(0.42, 0.05, 0.42, 0.06), k.M(i % 3 ? 0xd8cdb5 : 0xbfb29a), -0.48 + (i % 3) * 0.48, 0.08, -0.48 + Math.floor(i / 3) * 0.48, g)
+  if (joins.e) k.mk(k.rb(0.4, 0.06, 1.3, 0.04), k.M(0xc9b48c), 0.9, 0.04, 0, g)
+  if (joins.s) k.mk(k.rb(1.3, 0.06, 0.4, 0.04), k.M(0xc9b48c), 0, 0.04, 0.9, g)
+}
+
+function tree(k: Kit, g: THREE.Group, pine: boolean) {
+  k.mk(k.cyl(0.13, 0.2, 0.9, 7), k.M(WOOD), 0, 0.45, 0, g)
+  if (pine) for (const [r, h, y] of [[0.8, 0.9, 1.1], [0.62, 0.8, 1.6], [0.42, 0.65, 2.05]]) k.mk(k.cone(r, h, 8), k.M(0x3f8f2e), 0, y, 0, g)
+  else {
+    k.mk(k.sph(0.6, 12, 10), k.M(0x5da530), 0, 1.3, 0, g)
+    k.mk(k.sph(0.45, 12, 10), k.M(0x6db83a), 0.34, 1.08, 0.18, g)
+    k.mk(k.sph(0.4, 12, 10), k.M(0x4e9a2e), -0.32, 1.12, -0.1, g)
+    for (const [x, y, z] of [[0.3, 1.5, 0.35], [-0.2, 1.2, 0.45], [0.45, 1.05, -0.2]]) k.mk(k.sph(0.06, 6, 4), k.M(0xf04848), x, y, z, g)
+  }
+}
+
+function flowers(k: Kit, g: THREE.Group) {
+  k.mk(k.rb(1.3, 0.16, 1.0, 0.08), k.M(0x8f5e33), 0, 0.08, 0, g)
+  k.mk(k.rb(1.16, 0.06, 0.86, 0.04), k.M(0x6a4a2a), 0, 0.17, 0, g)
+  const colours = [0xff6fa8, 0xffe15a, 0xffffff, 0xb98cff, 0xff8a4a]
+  for (let i = 0; i < 14; i++) {
+    const x = -0.48 + (i % 5) * 0.24 + ((i * 7) % 3) * 0.02, z = -0.3 + Math.floor(i / 5) * 0.3
+    k.mk(k.cyl(0.015, 0.015, 0.2, 4), k.M(0x3f8f2e), x, 0.28, z, g)
+    k.mk(k.sph(0.07, 8, 6), k.M(colours[i % colours.length]), x, 0.4, z, g)
+  }
+}
+
+function lantern(k: Kit, g: THREE.Group, live: Live) {
+  k.mk(k.cyl(0.16, 0.2, 0.12, 8), k.M(0x4a4a58), 0, 0.06, 0, g)
+  k.mk(k.cyl(0.05, 0.06, 1.5, 8), k.M(0x4a4a58), 0, 0.8, 0, g)
+  k.mk(k.rb(0.36, 0.06, 0.06, 0.02), k.M(0x4a4a58), 0.14, 1.5, 0, g)
+  const lamp = k.mk(k.rb(0.2, 0.26, 0.2, 0.05), k.M(0xffe08a, { emissive: 0xffb84a, emissiveIntensity: 0.8 }), 0.28, 1.36, 0, g)
+  k.mk(k.cone(0.16, 0.12, 4), k.M(0x4a4a58), 0, 0.18, 0, lamp).rotation.y = Math.PI / 4
+  const glow = k.glow(0xffc46a, 1.4, 0.75)
+  glow.position.set(0.28, 1.36, 0)
+  g.add(glow)
+  live.glows ??= []
+  live.glows.push(glow)
+}
+
+function pond(k: Kit, g: THREE.Group) {
+  k.mk(k.cyl(0.78, 0.82, 0.14, 18), k.M(0xa79e8a), 0, 0.07, 0, g)
+  k.mk(k.cyl(0.66, 0.66, 0.06, 18), k.M(0x4db4f0), 0, 0.15, 0, g)
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; k.mk(k.geo('pebble', () => new THREE.DodecahedronGeometry(0.1, 0)), k.M(i % 2 ? 0xbdb6a6 : 0x9e978a), Math.cos(a) * 0.78, 0.16, Math.sin(a) * 0.78, g) }
+  for (const [x, z] of [[0.2, -0.15], [-0.25, 0.2]]) { k.mk(k.cyl(0.13, 0.13, 0.02, 10), k.M(0x5da530), x, 0.19, z, g); k.mk(k.sph(0.05, 6, 4), k.M(0xff8ac0), x, 0.22, z, g) }
+  k.mk(k.cyl(0.03, 0.03, 0.5, 5), k.M(0x6a8a3a), -0.55, 0.35, -0.4, g)
+  k.mk(k.caps(0.045, 0.14), k.M(0x7a5530), -0.55, 0.62, -0.4, g)
+}
+
 /** Wall: a block that joins its neighbours — palisade logs, then stone, then capped and gilded stone. */
 function wall(k: Kit, g: THREE.Group, level: number, joins: { e: boolean; s: boolean }) {
   const col = level === 1 ? WOOD : level >= 4 ? 0x8f8676 : STONE, cap = level >= 5 ? GOLD : level >= 4 ? METAL : level >= 2 ? STONE_L : WOOD_D
@@ -217,9 +270,15 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
     case 'wall': wall(k, inner, Math.min(5, L), joins); break
     case 'tower': tower(k, inner, Math.min(5, L)); break
     case 'tavern': tavern(k, inner, Math.min(3, L)); inner.scale.setScalar(0.85); break
+    case 'road': road(k, inner, joins); break
+    case 'tree': tree(k, inner, joins.s); break
+    case 'flowers': flowers(k, inner); break
+    case 'lantern': lantern(k, inner, live); break
+    case 'pond': pond(k, inner); break
   }
-  if (type !== 'wall') k.outline(inner, 0.03)
-  k.blob(g, 0, 0, type === 'wall' ? 1.2 : 2.0, type === 'wall' ? 1.2 : 1.7, 0.4)
+  const flat = type === 'road' || type === 'pond' || type === 'flowers'
+  if (type !== 'wall' && !flat) k.outline(inner, 0.03)
+  if (!flat) k.blob(g, 0, 0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.3 : 2.0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.1 : 1.7, 0.4)
   return g
 }
 

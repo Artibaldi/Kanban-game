@@ -65,6 +65,12 @@ const art = computed(() => {
       extra.push({ kind: 'spears', x: cx + w * 0.5, y: cy - h * 0.2 })
       break
     }
+    // Decor in the flat view: small and simple.
+    case 'road': shapes.push(...prism(cx, cy, 26, 2, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 4; break
+    case 'pond': shapes.push(...prism(cx, cy, 24, 3, '#4db4f0', v('stone'), v('stone-dark'))); topY = cy - 5; break
+    case 'flowers': shapes.push(...prism(cx, cy, 18, 5, '#ff8ac0', v('soil'), v('wood-dark'))); topY = cy - 7; break
+    case 'tree': shapes.push(...prism(cx, cy, 4, 12, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 14, 12, 26, v('grass-1'), v('grass-edge'))); topY = cy - 38; break
+    case 'lantern': shapes.push(...prism(cx, cy, 3, 26, '#6b6b78', '#4a4a58', '#3a3a46'), ...prism(cx, cy - 26, 6, 7, '#ffe08a', '#ffd34a', '#e6b02a')); topY = cy - 34; break
     case 'tavern': {
       const w = 19 + L * 1.4, h = 11 + L * 2.5
       const wood = props.ruined ? stone : [v('wood-light'), v('wood'), v('wood-dark')]

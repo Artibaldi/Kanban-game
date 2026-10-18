@@ -8,7 +8,8 @@ import { eIn, eOut, rand } from './kit'
 import type { CityStage } from './cityStage'
 import { animateTroop, troopModel } from './troops'
 
-const partOf: Record<BuildingType, Part> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other' }
+// Decor is not part of a defence: it is never a target and never in ruins.
+const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other' }
 
 interface Fig { type: string; g: THREE.Group; ph: number; alive: boolean; target: string | null; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number }
 interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; sy: number }
@@ -69,7 +70,7 @@ export class BattleLayer {
       }
     }
     // Ruins.
-    for (const e of this.city.entries()) if (ruined.has(partOf[e.type]) && !this.ruins.has(e.id)) this.ruin(e)
+    for (const e of this.city.entries()) { const p = partOf[e.type]; if (p && ruined.has(p) && !this.ruins.has(e.id)) this.ruin(e) }
     // Advance: each standing figure heads for the nearest standing building of the target part.
     const targets = this.city.entries().filter(e => target && partOf[e.type] === target && !this.ruins.has(e.id))
     for (const f of this.figs) {

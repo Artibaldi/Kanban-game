@@ -45,13 +45,14 @@ export interface Player {
   army_capacity: number; army_housing: number; army_queued: number
 }
 
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern'
+export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond'
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | DecorType
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
   hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number
 }
-export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean }
+export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean }
 export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number }
 
 export interface Settings {
@@ -76,6 +77,8 @@ export interface CityBuilding {
 export interface City {
   buildings: CityBuilding[]; limits: Record<string, { built: number; allowed: number }>; townhall: number
   player?: Player; server_time?: string
+  /** The island is grid×grid; the player's land is the centred square start…start+size. */
+  grid?: number; land?: { start: number; size: number }
 }
 
 export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number }
