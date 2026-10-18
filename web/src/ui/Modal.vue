@@ -8,6 +8,7 @@ const props = defineProps<{ open: boolean; title: string; wide?: boolean; side?:
 const emit = defineEmits<{ close: [] }>()
 const el = ref<HTMLDialogElement>()
 let hidden: HTMLElement | null = null
+let closing: Animation | null = null
 
 const originEl = () => (props.origin ? document.querySelector<HTMLElement>(props.origin) : null)
 function restore() { if (hidden) { hidden.style.visibility = ''; hidden = null } }
@@ -15,6 +16,14 @@ function restore() { if (hidden) { hidden.style.visibility = ''; hidden = null }
 function sync() {
   const d = el.value
   if (!d) return
+  // Reopened while the close animation runs: stop it and stay open.
+  if (props.open && closing) {
+    closing.onfinish = null
+    d.getAnimations().forEach(a => a.cancel())
+    d.querySelector('.inner')?.getAnimations().forEach(a => a.cancel())
+    closing = null
+    return
+  }
   if (props.open && !d.open) {
     d.showModal()
     const o = originEl()
@@ -27,15 +36,17 @@ function sync() {
   }
   if (!props.open && d.open) {
     const o = hidden && hidden.isConnected ? hidden : originEl()
-    const done = () => { d.close(); restore(); d.getAnimations().forEach(a => a.cancel()) }
-    if (reduced()) { d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, fill: 'forwards' }).onfinish = done; return }
+    const done = () => { closing = null; d.close(); restore(); d.getAnimations().forEach(a => a.cancel()) }
+    if (reduced()) { closing = d.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, fill: 'forwards' }); closing.onfinish = done; return }
     const r = o?.getBoundingClientRect()
     if (!o || !r || r.bottom < 0 || r.top > innerHeight) {
-      d.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(.98)' }], { duration: 196, easing: ease.exit, fill: 'forwards' }).onfinish = done
+      closing = d.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(.98)' }], { duration: 196, easing: ease.exit, fill: 'forwards' })
+      closing.onfinish = done
       return
     }
     d.querySelector('.inner')?.animate([{ opacity: 1 }, { opacity: 0, offset: 0.45 }, { opacity: 0 }], { duration: 280, fill: 'forwards' })
-    d.animate([{ transform: 'none', borderRadius: '28px' }, flipFrom(r, d.getBoundingClientRect(), 20)], { duration: 280, easing: ease.inOut, fill: 'forwards' }).onfinish = () => {
+    closing = d.animate([{ transform: 'none', borderRadius: '28px' }, flipFrom(r, d.getBoundingClientRect(), 20)], { duration: 280, easing: ease.inOut, fill: 'forwards' })
+    closing.onfinish = () => {
       d.querySelector('.inner')?.getAnimations().forEach(a => a.cancel())
       done()
     }

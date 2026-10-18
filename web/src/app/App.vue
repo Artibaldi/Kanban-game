@@ -65,7 +65,7 @@ async function setMode(on: boolean) {
   if (!session.me || session.me.game_mode === on) return
   try {
     await session.setGameMode(on)
-    toasts.push({ kind: 'info', title: on ? 'Игровой режим включён' : 'Рабочий режим: только задачи, без игры и анимаций' })
+    toasts.push({ kind: 'info', title: on ? 'Игровой режим включён' : 'Рабочий режим: только задачи, без игровых элементов' })
     if (!session.gameOn && route.meta.game) router.push('/board')
   } catch (e) { toasts.error(e) }
 }

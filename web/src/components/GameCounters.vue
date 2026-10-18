@@ -17,7 +17,7 @@ watch(() => props.player.gold, (to, from) => {
 
 <template>
   <div class="counters" aria-label="Ресурсы игрока">
-    <span id="res-gold" ref="pill" class="res gold" :class="{ neg: player.gold < 0 }" :title="`Золото: ${num(player.gold)} из ${num(player.gold_cap)} — строительство и улучшения`">
+    <span ref="pill" class="res gold" :class="{ neg: player.gold < 0 }" :title="`Золото: ${num(player.gold)} из ${num(player.gold_cap)} — строительство и улучшения`">
       <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#FFC42E" stroke="#7A4A00" stroke-width="2"/><circle cx="12" cy="12" r="6" fill="none" stroke="#B87A00" stroke-width="1.6"/><path d="M12 8.5v7" stroke="#7A4A00" stroke-width="2" stroke-linecap="round"/></svg>
       <span ref="goldEl"><span class="v num">{{ num(player.gold) }}</span></span><span class="sr-only"> золота</span>
     </span>

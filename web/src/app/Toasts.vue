@@ -1,22 +1,35 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
 import Icon from '../ui/Icon.vue'
 import { useToasts } from '../stores/toast'
 const toasts = useToasts()
+// Ctrl/Cmd+Z undoes the newest undoable action, unless the user is typing.
+function onKey(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return
+  const el = e.target as HTMLElement
+  if (el.closest('input, textarea, select, [contenteditable="true"]')) return
+  const t = toasts.lastAction
+  if (!t) return
+  e.preventDefault()
+  toasts.act(t.id)
+}
+onMounted(() => addEventListener('keydown', onKey))
+onUnmounted(() => removeEventListener('keydown', onKey))
 const icon = { success: 'check', error: 'alert', info: 'info', reward: 'coins' } as const
 </script>
 
 <template>
   <div class="toasts" role="status" aria-live="polite">
     <TransitionGroup name="toast">
-      <div v-for="t in toasts.items" :key="t.id" class="toast" :class="t.kind">
+      <div v-for="t in toasts.items" :key="t.id" class="toast" :class="t.kind" @mouseenter="toasts.pause(t.id)" @mouseleave="toasts.resume(t.id)" @focusin="toasts.pause(t.id)" @focusout="toasts.resume(t.id)">
         <span class="ic"><Icon :name="icon[t.kind]" :size="18" /></span>
         <div class="grow msg">
           <strong>{{ t.title }}</strong>
           <span v-if="t.text" class="text">{{ t.text }}</span>
         </div>
-        <button v-if="t.action" class="act" @click="toasts.act(t.id)">{{ t.action.label }}</button>
+        <button v-if="t.action" class="act" :aria-keyshortcuts="'Control+Z Meta+Z'" title="Или Ctrl+Z (⌘Z)" @click="toasts.act(t.id)">{{ t.action.label }}</button>
         <button v-else class="x" aria-label="Закрыть уведомление" @click="toasts.dismiss(t.id)"><Icon name="x" :size="14" /></button>
-        <span v-if="t.action" class="timer" :style="{ animationDuration: t.ms + 'ms' }" aria-hidden="true" />
+        <span v-if="t.action" class="timer" :style="{ animationDuration: t.ms + 'ms', animationPlayState: t.paused ? 'paused' : 'running' }" aria-hidden="true" />
       </div>
     </TransitionGroup>
   </div>

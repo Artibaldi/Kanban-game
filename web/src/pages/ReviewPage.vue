@@ -67,6 +67,8 @@ async function approve(t: Task, ev: Event) {
   work.reviewCount = review.value.length
   await nextTick()
   const card = document.querySelector<HTMLElement>(`.rcard[data-id="${t.id}"]`)
+  // The buttons are gone: keep the keyboard on the same card.
+  card?.querySelector<HTMLElement>('.linkish')?.focus({ preventScroll: true })
   if (!card || reduced()) return
   const stamp = card.querySelector('.stamp'), ink = card.querySelector('.ink'), R = 'translate(-50%,-50%) '
   if (!session.gameOn) {

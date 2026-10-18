@@ -5,7 +5,7 @@ import { useToasts, type ToastAction } from '../stores/toast'
 import { useWork } from '../stores/work'
 import { stateName } from './board'
 import { undoFor } from './work'
-import type { ReversalResult, RewardResult, Task, TaskState } from '../types'
+import type { ReversalResult, RewardResult, Task, TaskDetail, TaskState } from '../types'
 
 export interface MoveResult { task: Task; reward?: RewardResult; reversal?: ReversalResult }
 export interface MoveOptions {
@@ -30,7 +30,17 @@ export async function moveTask(task: Task, to: TaskState, opts: MoveOptions = {}
     const action: ToastAction | undefined = back ? {
       label: 'Отменить',
       run: async () => {
-        if (await moveTask(r.task, back.to, { comment: back.comment, quiet: true })) toasts.push({ kind: 'info', title: 'Действие отменено' }, 2500)
+        // Undo the move on the task as it is now: it may have been reordered or edited since.
+        let fresh: Task
+        try { fresh = (await api.get<TaskDetail>(`/tasks/${task.id}`)).task } catch (e) { toasts.error(e); return }
+        if (fresh.state !== r.task.state) {
+          toasts.push({ kind: 'error', title: `${task.number} уже в «${stateName[fresh.state]}» — отменять нечего.` })
+          opts.after?.()
+          return
+        }
+        const u = await moveTask(fresh, back.to, { comment: back.comment, quiet: true })
+        if (u?.reversal) toasts.push({ kind: 'info', title: `Подтверждение ${task.number} отменено`, text: `Награда возвращена: −${u.reversal.gold} золота, −${u.reversal.energy} энергии.` + (u.reversal.debt ? ' Ресурсы уже потрачены — у исполнителя долг.' : '') }, 6000)
+        else if (u) toasts.push({ kind: 'info', title: 'Действие отменено' }, 2500)
         opts.after?.()
       },
     } : undefined

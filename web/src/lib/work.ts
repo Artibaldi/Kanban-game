@@ -65,3 +65,23 @@ export function cardReward(t: Task, s: RewardSettings | null | undefined, now = 
   if (!s || t.state === 'backlog' || t.state === 'done') return null
   return rewardPreview(t.points, t.priority, s, !!t.due_date && !isOverdue(t.due_date, now)).gold
 }
+
+// Drop positions. `column` is the column as shown (sorted), `index` is where the card goes among the other cards.
+const others = (column: Task[], moving: Task) => column.filter(t => t.id !== moving.id)
+
+/** projectIndex: the server orders each column per project, so the drop index is counted within the card's project. */
+export function projectIndex(column: Task[], moving: Task, index: number) {
+  return others(column, moving).slice(0, index).filter(t => t.project_id === moving.project_id).length
+}
+
+/** rankAt: a rank between the neighbours, so the optimistic card shows exactly where it was dropped. */
+export function rankAt(column: Task[], moving: Task, index: number) {
+  const o = others(column, moving)
+  if (!o.length) return 1024
+  if (index <= 0) return o[0].rank - 0.5
+  if (index >= o.length) return o[o.length - 1].rank + 0.5
+  return (o[index - 1].rank + o[index].rank) / 2
+}
+
+/** sameSpot: the card was dropped where it already is. */
+export const sameSpot = (column: Task[], moving: Task, index: number) => column.findIndex(t => t.id === moving.id) === index

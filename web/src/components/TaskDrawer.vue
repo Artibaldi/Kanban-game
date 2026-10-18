@@ -275,7 +275,7 @@ const kindName: Record<string, string> = { task_reward: 'Награда', task_r
       </section>
     </div>
   </Modal>
-  <MoveMenu v-if="menuAnchor && t" :task="t" :anchor="menuAnchor" :viewer="viewer" @move="onMenuMove" @close="r => { const a = menuAnchor; menuAnchor = null; if (r) a?.focus() }" />
+  <MoveMenu v-if="menuAnchor && t" :task="t" :anchor="menuAnchor" :viewer="viewer" :to="menuAnchor.closest('dialog') || 'body'" @move="onMenuMove" @close="r => { const a = menuAnchor; menuAnchor = null; if (r) a?.focus() }" />
   <ReasonDialog :open="!!reopenTo" title="Вернуть подтверждённую задачу" :text="`Задача вернётся в «${reopenTo ? stateName[reopenTo] : ''}». Награда исполнителя и баллы будут отменены отдельной записью в журнале. Если ресурсы уже потрачены, у исполнителя появится долг, который погасится следующими наградами.`"
     action="Вернуть и отменить награду" destructive @close="reopenTo = null" @confirm="c => confirmReason(reopenTo!, c)" />
   <ReasonDialog :open="returnOpen" title="Вернуть на доработку" text="Задача вернётся в «В работе». Комментарий увидит исполнитель." action="Вернуть на доработку"

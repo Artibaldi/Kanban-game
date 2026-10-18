@@ -11,7 +11,7 @@ import ReasonDialog from '../components/ReasonDialog.vue'
 import { api } from '../api'
 import { columns, moveBlock, stateName } from '../lib/board'
 import { plural } from '../lib/format'
-import { boardStats, dropZoneAccepts } from '../lib/work'
+import { boardStats, dropZoneAccepts, projectIndex, rankAt, sameSpot } from '../lib/work'
 import { moveTask } from '../lib/taskActions'
 import { ease, reduced } from '../ui/motion'
 import { useSession } from '../stores/session'
@@ -67,6 +67,7 @@ const byColumn = computed(() => {
   return m
 })
 const shown = (s: string) => (s === 'done' && !doneAll.value ? byColumn.value.done.slice(0, DONE_SHOWN) : byColumn.value[s])
+const othersIndex = (s: string, t: Task) => shown(s).filter(x => x.id !== drag.value?.id).indexOf(t)
 const pointsIn = (s: string) => byColumn.value[s].reduce((n, t) => n + t.points, 0)
 const stats = computed(() => boardStats(tasks.value))
 const statItems = computed(() => [
@@ -76,18 +77,27 @@ const statItems = computed(() => [
   { icon: 'trophy', value: stats.value.donePoints, label: `${plural(stats.value.donePoints, 'очко', 'очка', 'очков')} сдано` },
 ])
 
-function open(t: Task) { menu.value = null; router.replace({ query: { ...route.query, task: t.id } }) }
+function open(t: Task) {
+  // Opened from the «⋯» menu: focus its button first, so closing the card returns focus there.
+  menu.value?.anchor.focus({ preventScroll: true })
+  menu.value = null
+  router.replace({ query: { ...route.query, task: t.id } })
+}
 function close() { const q = { ...route.query }; delete q.task; router.replace({ query: q }) }
 
+/** tryMove: `index` is the place among the other cards of the target column as shown. */
 async function tryMove(t: Task, to: TaskState, index?: number) {
+  const column = byColumn.value[to]
+  if (to === t.state && (to === 'done' || index === undefined || sameSpot(column, t, index))) return
   const block = moveBlock(t, to, viewer.value)
   if (block) { toasts.push({ kind: 'error', title: block }); return }
-  if (t.state === 'done' && to !== 'done') { pendingReopen.value = { task: t, to, index: index ?? 0 }; return }
+  if (t.state === 'done' && to !== 'done') { pendingReopen.value = { task: t, to, index: index !== undefined ? projectIndex(column, t, index) : 0 }; return }
   if (t.state === 'review' && to === 'in_progress' && t.assignee_id !== session.me?.id && session.isLead) { pendingReturn.value = t; return }
   // Optimistic: place the card, then reconcile with the server's answer.
   const prev = tasks.value
-  tasks.value = tasks.value.map(x => (x.id === t.id ? { ...x, state: to, rank: index !== undefined ? index * 1024 - 1 : 1e12 } : x))
-  const r = await moveTask(t, to, { index, undoable: true, after: load })
+  const rank = index !== undefined ? rankAt(column, t, index) : 1e12
+  tasks.value = tasks.value.map(x => (x.id === t.id ? { ...x, state: to, rank } : x))
+  const r = await moveTask(t, to, { index: index !== undefined ? projectIndex(column, t, index) : undefined, undoable: true, after: load })
   if (!r) tasks.value = prev
   load()
 }
@@ -131,6 +141,7 @@ const zoneShown = computed(() => !!dragTask.value && dropZoneAccepts(dragTask.va
 
 function onPointerDown(e: PointerEvent) {
   const el = (e.target as HTMLElement).closest<HTMLElement>('.tcard')
+  suppressClick = false
   if (!el || (e.target as HTMLElement).closest('.c-more') || e.button !== 0 || pend) return
   pend = { id: el.dataset.id!, el, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, pid: e.pointerId, touch: e.pointerType !== 'mouse', started: false, ox: 0, oy: 0 }
   if (pend.touch) pend.timer = window.setTimeout(() => { if (pend && !pend.started) { startDrag(); navigator.vibrate?.(12) } }, 260)
@@ -159,6 +170,16 @@ function onPointerCancel(e: PointerEvent) {
   pend = null
 }
 function onTouchMove(e: TouchEvent) { if (pend?.started) e.preventDefault() }
+// A drag never outlives the pointer: losing it, the window or Escape cancels it.
+function cancelDrag() {
+  if (!pend) return
+  clearTimeout(pend.timer)
+  if (pend.started) endDrag(true)
+  pend = null
+}
+function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && pend?.started) { e.preventDefault(); cancelDrag() } }
+function onVisibility() { if (document.visibilityState !== 'visible') cancelDrag() }
+function onContextMenu(e: MouseEvent) { if (pend?.touch && (e.target as HTMLElement).closest('.tcard')) e.preventDefault() }
 function onClickCapture(e: MouseEvent) { if (suppressClick) { e.stopPropagation(); e.preventDefault() } }
 
 function startDrag() {
@@ -166,10 +187,13 @@ function startDrag() {
   const t = tasks.value.find(x => x.id === p.id)
   if (!t) return
   p.started = true; p.ox = p.x - r.left; p.oy = p.y - r.top
+  try { p.el.setPointerCapture(p.pid) } catch { /* the pointer may already be gone */ }
+  p.el.addEventListener('lostpointercapture', () => { if (pend === p) { if (p.started) endDrag(true); pend = null } }, { once: true })
   const g = document.createElement('div')
   g.className = 'drag-ghost'
   const clone = p.el.cloneNode(true) as HTMLElement
   clone.style.width = r.width + 'px'
+  clone.removeAttribute('data-id')
   clone.querySelectorAll('button').forEach(b => b.setAttribute('tabindex', '-1'))
   g.appendChild(clone)
   g.style.transform = `translate(${r.left}px,${r.top}px)`
@@ -213,11 +237,12 @@ async function endDrag(cancel: boolean) {
   const p = pend!
   cancelAnimationFrame(raf)
   document.body.classList.remove('dragging')
+  try { p.el.releasePointerCapture(p.pid) } catch { /* already released */ }
   const t = tasks.value.find(x => x.id === p.id)
   const target: { state: TaskState; index?: number } | null = cancel ? null : zoneHot.value ? { state: 'review' } : dropAt.value
   drag.value = null; dropAt.value = null; zoneHot.value = false
   const g = p.ghost
-  if (t && target && (target.state !== t.state || target.index !== undefined)) tryMove(t, target.state, target.index)
+  if (t && target) tryMove(t, target.state, target.index)
   await nextTick()
   const dest = boardEl.value?.querySelector<HTMLElement>(`.tcard[data-id="${p.id}"]`)
   if (!g) return
@@ -234,12 +259,20 @@ onMounted(() => {
   addEventListener('pointerup', onPointerUp)
   addEventListener('pointercancel', onPointerCancel)
   document.addEventListener('touchmove', onTouchMove, { passive: false })
+  addEventListener('keydown', onKey)
+  addEventListener('blur', cancelDrag)
+  document.addEventListener('visibilitychange', onVisibility)
 })
 onUnmounted(() => {
   removeEventListener('pointermove', onPointerMove)
   removeEventListener('pointerup', onPointerUp)
   removeEventListener('pointercancel', onPointerCancel)
   document.removeEventListener('touchmove', onTouchMove)
+  removeEventListener('keydown', onKey)
+  removeEventListener('blur', cancelDrag)
+  document.removeEventListener('visibilitychange', onVisibility)
+  cancelAnimationFrame(raf)
+  pend = null
   document.body.classList.remove('dragging')
   document.querySelectorAll('.drag-ghost').forEach(g => g.remove())
 })
@@ -283,7 +316,7 @@ function onBoardScroll() {
           <span class="sw" aria-hidden="true" />{{ c.name }}<em>{{ byColumn[c.state].length }}</em>
         </button>
       </nav>
-      <div ref="boardEl" class="board" :class="{ dragging: !!drag }" @pointerdown="onPointerDown" @click.capture="onClickCapture" @contextmenu="e => (e.target as HTMLElement).closest('.tcard') && e.preventDefault()" @scroll.passive="onBoardScroll">
+      <div ref="boardEl" class="board" :class="{ dragging: !!drag }" @pointerdown="onPointerDown" @click.capture="onClickCapture" @contextmenu="onContextMenu" @scroll.passive="onBoardScroll">
         <section v-for="c in columns" :key="c.state" class="col" :class="['s-' + c.state, { hot: dropAt?.state === c.state, nodrop: drag && !canDrop(c.state) }]" :data-col="c.state" :aria-labelledby="`col-${c.state}`">
           <header class="col-h">
             <span class="sw" aria-hidden="true" />
@@ -292,8 +325,8 @@ function onBoardScroll() {
             <span class="sum">{{ pointsIn(c.state) }} {{ plural(pointsIn(c.state), 'очко', 'очка', 'очков') }}</span>
           </header>
           <div class="list">
-            <template v-for="(t, i) in shown(c.state)" :key="t.id">
-              <div v-if="dropAt?.state === c.state && dropAt.index === i && drag?.id !== t.id" class="drop-line" />
+            <template v-for="t in shown(c.state)" :key="t.id">
+              <div v-if="dropAt?.state === c.state && drag?.id !== t.id && dropAt.index === othersIndex(c.state, t)" class="drop-line" />
               <TaskCard :task="t" menu :class="{ placeholder: drag?.id === t.id }" @open="open(t)" @menu="a => (menu = menu?.task.id === t.id ? null : { task: t, anchor: a })" />
             </template>
             <div v-if="dropAt?.state === c.state && dropAt.index >= shown(c.state).filter(x => x.id !== drag?.id).length" class="drop-line" />
@@ -333,7 +366,10 @@ function onBoardScroll() {
 .sel:focus-within { outline: 3px solid var(--color-focus); outline-offset: 2px; }
 .loading { margin-top: 24px; }
 
-.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; align-items: start; margin-top: 20px; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; align-items: stretch; margin-top: 20px; }
+/* Every column is as tall as the longest one, so an empty column is still an easy drop target. */
+.col { display: flex; flex-direction: column; }
+.list { flex: 1; }
 .col { border-radius: var(--radius-lg); padding: 10px; transition: background 0.25s, box-shadow 0.25s, opacity 0.25s; }
 .col-h { display: flex; align-items: center; gap: 8px; padding: 6px 6px 12px; }
 .sw { width: 12px; height: 12px; border-radius: 50%; background: var(--fill); box-shadow: inset 0 0 0 1px rgba(30, 30, 30, 0.18); flex: none; }
@@ -361,7 +397,7 @@ function onBoardScroll() {
 @media (max-width: 1100px) {
   .board { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; margin: 12px calc(-1 * var(--space-8)) 0; padding: 0 var(--space-8) 8px; scroll-padding: 0 var(--space-8); scrollbar-width: none; overscroll-behavior-x: contain; }
   .board::-webkit-scrollbar { display: none; }
-  .col { flex: 0 0 min(340px, 82vw); scroll-snap-align: start; }
+  .col { flex: 0 0 min(340px, 82vw); scroll-snap-align: start; min-height: 60vh; }
 }
 @media (max-width: 767px) {
   .hero-r .sel, .hero-r .add { display: none; }
