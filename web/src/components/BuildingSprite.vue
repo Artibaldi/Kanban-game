@@ -75,6 +75,11 @@ const art = computed(() => {
     case 'trap': shapes.push(...prism(cx, cy, 16, 2, v('wood-light'), v('wood'), v('wood-dark'))); topY = cy - 4; break
     case 'stable': shapes.push(...prism(cx, cy, 24, 10, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 24, 10, 8, v('gold'), v('gold-dark'))); topY = cy - 30; break
     case 'crossbow': shapes.push(...prism(cx, cy, 13, 30, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 30, 16, 3, '#9aa6ba', '#7d8ba3', '#5d6b83')); topY = cy - 42; break
+    case 'banner': shapes.push(...prism(cx, cy, 12, 4, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 4, 2, 34, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx + 8, cy - 30, 14, 9, '#5aa2ff', '#3e8ef0', '#2c5fa8')); topY = cy - 42; break
+    case 'flags': shapes.push(...prism(cx - 6, cy, 2, 24, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx + 6, cy, 2, 24, v('wood-light'), v('wood'), v('wood-dark')), ...prism(cx - 2, cy - 18, 7, 5, '#5aa2ff', '#3e8ef0', '#2c5fa8'), ...prism(cx + 10, cy - 18, 7, 5, '#ffe27a', '#ffd34a', '#e6b02a')); topY = cy - 28; break
+    case 'arch': shapes.push(...prism(cx - 8, cy, 5, 22, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx + 8, cy, 5, 22, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 22, 22, 5, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 30; break
+    case 'fountain': shapes.push(...prism(cx, cy, 20, 5, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 5, 4, 12, '#9fe0ff', '#7fd0ff', '#4db4f0')); topY = cy - 20; break
+    case 'statue': shapes.push(...prism(cx, cy, 12, 8, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 8, 6, 16, '#f2eee4', '#e6e0d2', '#cfc8b8')); topY = cy - 28; break
     // Decor in the flat view: small and simple.
     case 'road': shapes.push(...prism(cx, cy, 26, 2, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 4; break
     case 'pond': shapes.push(...prism(cx, cy, 24, 3, '#4db4f0', v('stone'), v('stone-dark'))); topY = cy - 5; break

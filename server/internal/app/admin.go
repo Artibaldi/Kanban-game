@@ -100,12 +100,26 @@ func (s *Server) adminPatchUser(w http.ResponseWriter, r *http.Request) {
 		if err := tx.QueryRow(ctx, `SELECT team_id::text, active FROM users WHERE id=$1`, id).Scan(&oldTeam, &wasActive); err != nil {
 			return 0, nil, err
 		}
+		// Lending moves troops between camps: lock the user and everyone they lend to or borrow from first,
+		// in the same order as the banner paths, and only then change the user's row.
+		if oldTeam != nil {
+			if err := lockTeamLending(ctx, tx, *oldTeam); err != nil {
+				return 0, nil, err
+			}
+		}
+		if err := lockLending(ctx, tx, id, false); err != nil {
+			return 0, nil, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE users SET role=$2, team_id=$3, active=$4 WHERE id=$1`, id, role, team, active); err != nil {
 			return 0, nil, err
 		}
 		// Leaving the team or being switched off closes the user's challenges: nobody fights a former colleague.
 		if (wasActive && !active) || (oldTeam == nil) != (team == nil) || (oldTeam != nil && team != nil && *oldTeam != *team) {
 			if err := closeChallengesOf(ctx, tx, id); err != nil {
+				return 0, nil, err
+			}
+			// Troops lent by or to them go home.
+			if err := returnReinforcements(ctx, tx, id, false); err != nil {
 				return 0, nil, err
 			}
 		}

@@ -109,7 +109,21 @@ func cityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 		limits[k] = map[string]int{"built": c.Count(k), "allowed": def.Allowed(th)}
 	}
 	start, size := game.Land(th)
-	return map[string]any{"buildings": out, "limits": limits, "townhall": th, "grid": game.MaxGrid, "land": map[string]int{"start": start, "size": size}}, nil
+	// Wave-reward decor the player's team has unlocked (team achievements, the same for every member).
+	var team string
+	if err = q.QueryRow(ctx, `SELECT COALESCE(team_id::text,'') FROM users WHERE id=$1`, userID).Scan(&team); err != nil {
+		return nil, err
+	}
+	crowns, err := teamCrowns(ctx, q, team)
+	if err != nil {
+		return nil, err
+	}
+	won := game.Trophies(crowns)
+	rewards := map[string]bool{}
+	for _, k := range game.RewardOrder {
+		rewards[k] = won[k]
+	}
+	return map[string]any{"buildings": out, "limits": limits, "townhall": th, "grid": game.MaxGrid, "land": map[string]int{"start": start, "size": size}, "rewards": rewards}, nil
 }
 
 // feedTeam is the team that sees a building's events in the feed. Teammates are the only rivals, so a trap's
@@ -220,6 +234,13 @@ func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
 		}
 		if err = debtRefusal(b); err != nil {
 			return 0, nil, err
+		}
+		crowns, err := teamCrowns(ctx, tx, a.TeamID)
+		if err != nil {
+			return 0, nil, err
+		}
+		if rf := game.RewardLocked(in.Type, crowns); rf != nil {
+			return 0, nil, asAPI(rf)
 		}
 		spec, rf := game.CheckPlace(c, in.Type, in.X, in.Y, b.Gold)
 		if rf != nil {

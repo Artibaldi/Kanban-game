@@ -45,14 +45,14 @@ export interface Player {
   army_capacity: number; army_housing: number; army_queued: number
 }
 
-export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond'
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | 'archery' | 'workshop' | 'mortar' | 'trap' | 'stable' | 'crossbow' | DecorType
+export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond' | 'flags' | 'arch' | 'fountain' | 'statue'
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | 'archery' | 'workshop' | 'mortar' | 'trap' | 'stable' | 'crossbow' | 'banner' | DecorType
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
-  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number
+  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number; garrison?: number
 }
-export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean }
+export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean; reward?: string }
 export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number; ranged?: boolean; flank?: boolean }
 
 export interface Settings {
@@ -79,13 +79,16 @@ export interface City {
   player?: Player; server_time?: string
   /** The island is grid×grid; the player's land is the centred square start…start+size. */
   grid?: number; land?: { start: number; size: number }
+  /** Wave-reward decor the team has unlocked. */
+  rewards?: Record<string, boolean>
 }
 
 export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number
-  mortar_dmg?: number; mortars?: number; trap_dmg?: number; traps?: number; crossbow_dps?: number; crossbows?: number }
+  mortar_dmg?: number; mortars?: number; trap_dmg?: number; traps?: number; crossbow_dps?: number; crossbows?: number; garrison?: Record<string, number> }
 export interface Round {
   n: number; tower_damage: number; killed: Record<string, number>; alive: Record<string, number>
   wall_damage: number; tower_hit: number; base_damage: number; mortar_damage?: number; crossbow_damage?: number; trap_damage?: number
+  garrison_damage?: number; garrison_hit?: number; garrison_hp?: number
   wall_hp: number; tower_hp: number; townhall_hp: number; other_hp: number; events: string[]
 }
 export interface Battle {

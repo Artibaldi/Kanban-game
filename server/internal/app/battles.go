@@ -57,7 +57,11 @@ func duelists(ctx context.Context, q dbtx, a actor, st game.Settings, only strin
 			return nil, 0, err
 		}
 		list[i].TownHall = c.TownHall()
-		list[i].Defense = game.DefenseOf(c).Visible()
+		d, err := defenseOfPlayer(ctx, q, list[i].UserID)
+		if err != nil {
+			return nil, 0, err
+		}
+		list[i].Defense = d.Visible()
 		if today >= limit {
 			list[i].Reason = "Лимит дружеских боёв на сегодня исчерпан"
 		} else {
@@ -301,11 +305,10 @@ func (s *Server) fightFriendly(ctx context.Context, tx pgx.Tx, a actor, defender
 	if total == 0 {
 		return "", refuse(422, "empty_army", "Выберите войска для боя.")
 	}
-	defCity, err := loadCity(ctx, tx, defenderID)
+	defense, err := defenseOfPlayer(ctx, tx, defenderID)
 	if err != nil {
 		return "", err
 	}
-	defense := game.DefenseOf(defCity)
 	seed := rand.Int64N(1 << 53) // fits a JavaScript number exactly
 	levels, _, err := troopLevels(ctx, tx, a.ID)
 	if err != nil {

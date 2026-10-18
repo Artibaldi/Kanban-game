@@ -8,6 +8,7 @@ import Portrait3D from '../components/Portrait3D.vue'
 import { api } from '../api'
 import { placeBlock, specLines, upgradeBlock } from '../lib/city'
 import MarketPanel from '../components/MarketPanel.vue'
+import BannerPanel from '../components/BannerPanel.vue'
 import { duration, num } from '../lib/format'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
@@ -195,6 +196,7 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
             <p v-if="upgradeBlock(selected, city, player, builders)" class="reason">{{ upgradeBlock(selected, city, player, builders) }}</p>
           </template>
           <p v-else-if="!isDecor(selected.type)" class="desc">Максимальный уровень.</p>
+          <BannerPanel v-if="selected.type === 'banner' && selected.level >= 1" :key="selected.id" />
           <MarketPanel v-if="selected.type === 'market' && selected.level >= 1 && player" :fee-pct="selected.spec.fee_pct || 30" :player="player" />
         </section>
 
@@ -217,14 +219,16 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
 
         <section class="g-panel build-panel">
           <span class="g-ribbon"><b>Облик</b></span>
-          <p class="decor-note">Мгновенно, без строителя. На силу города не влияет — только на его вид.</p>
+          <p class="decor-note">Мгновенно, без строителя. На силу города не влияет — только на его вид. Флаги, арка, фонтан и статуя — бесплатные награды всей команде за отбитые волны.</p>
           <ul v-if="city && player" class="decor-list">
             <li v-for="d in decorDefs" :key="d.type">
               <button class="decor" :class="{ on: placing === d.type }" :disabled="!!placeBlock(d, city, player, builders)" :aria-pressed="placing === d.type"
                 :title="placeBlock(d, city, player, builders) || d.description" @click="startPlacing(d.type)">
                 <Portrait3D :building="d.type" :size="44" :faded="!!placeBlock(d, city, player, builders)" />
                 <strong>{{ d.name }}</strong>
-                <span class="price"><span class="g-coin" aria-hidden="true" />{{ d.levels[0].cost }}</span>
+                <span v-if="d.reward && !city.rewards?.[d.type]" class="price lock">награда</span>
+                <span v-else-if="!d.levels[0].cost" class="price">даром</span>
+                <span v-else class="price"><span class="g-coin" aria-hidden="true" />{{ d.levels[0].cost }}</span>
                 <span class="meta">{{ city.limits[d.type]?.built }}/{{ city.limits[d.type]?.allowed }}</span>
               </button>
             </li>
@@ -274,6 +278,7 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
 .cost-row span { display: inline-flex; align-items: center; gap: 4px; }
 .price { display: inline-flex; align-items: center; gap: 6px; font: 900 16px var(--font-game); color: #3a2410; }
 .price .g-coin { width: 22px; height: 22px; }
+.price.lock { font: 800 12px var(--font-sans); color: #7a5530; }
 .price .g-coin::after { width: 6px; height: 6px; }
 .wide { width: 100%; }
 .reason { font: 700 12px var(--font-sans); color: #9b1f1f; margin-top: 4px; }

@@ -32,6 +32,7 @@ type LevelSpec struct {
 	Builders      int   `json:"builders,omitempty"`   // builder hut
 	Splash        int   `json:"splash,omitempty"`     // mortar: damage per unit hit by a shell
 	TrapDmg       int   `json:"trap_dmg,omitempty"`   // trap: damage when it springs
+	Garrison      int   `json:"garrison,omitempty"`   // team banner: places for colleagues' troops
 }
 
 type BuildingDef struct {
@@ -44,6 +45,8 @@ type BuildingDef struct {
 	Defense  bool        `json:"defense"`
 	// Decor: looks only — instant, no builder, no hit points, never part of a defence.
 	Decor bool `json:"decor,omitempty"`
+	// Reward: what the team must achieve in waves to unlock this decor (free, for every member).
+	Reward string `json:"reward,omitempty"`
 }
 
 func (d BuildingDef) MaxLevel() int { return len(d.Levels) }
@@ -68,7 +71,7 @@ func (d BuildingDef) Allowed(thLevel int) int {
 }
 
 // BuildingOrder is the order buildings are offered in the city.
-var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "archery", "workshop", "mortar", "trap", "stable", "crossbow", "road", "tree", "flowers", "lantern", "pond"}
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "archery", "workshop", "mortar", "trap", "stable", "crossbow", "banner", "road", "tree", "flowers", "lantern", "pond", "flags", "arch", "fountain", "statue"}
 
 // Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
 // 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
@@ -221,6 +224,20 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 3500, Seconds: 80, RequiresTH: 6, HP: 1050, DPS: 72},
 		},
 	},
+	"banner": {
+		Type: "banner", Name: "Знамя команды", Description: "Сюда коллеги присылают свои войска: они защищают город в дружеских боях и не гибнут. Отпустить их можно в любой момент.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 300, Seconds: 20, RequiresTH: 2, HP: 400, Garrison: 6},
+			{Level: 2, Cost: 700, Seconds: 35, RequiresTH: 3, HP: 550, Garrison: 12},
+			{Level: 3, Cost: 1300, Seconds: 50, RequiresTH: 4, HP: 700, Garrison: 20},
+		},
+	},
+	// Wave rewards: free decor the whole team unlocks together.
+	"flags":    reward("flags", "Флаги команды", "Флаги в цветах команды.", "Команда отбила волну хотя бы с одной короной.", []int{2, 2, 3, 3, 4}),
+	"arch":     reward("arch", "Триумфальная арка", "Арка над дорогой в честь большой победы.", "Команда отбила волну на три короны.", []int{1}),
+	"fountain": reward("fountain", "Фонтан", "Фонтан на площади.", "Три волны подряд на две короны и больше.", []int{1}),
+	"statue":   reward("statue", "Статуя защитника", "Каменный защитник на постаменте.", "Три волны на три короны.", []int{1}),
 	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.
 	"road":    decor("road", "Дорога", "Мостовая между зданиями. Укладывается цепочкой.", 5, []int{40, 60, 80, 100, 120}),
 	"tree":    decor("tree", "Дерево", "Тень и зелень во дворе.", 15, []int{6, 10, 14, 18, 22}),
@@ -416,6 +433,12 @@ func CheckMove(c City, b Building, x, y int) *Refusal {
 		return refuse("cell_occupied", "Клетка уже занята.")
 	}
 	return nil
+}
+
+func reward(kind, name, description, why string, maxCount []int) BuildingDef {
+	d := decor(kind, name, description, 0, maxCount)
+	d.Reward = why
+	return d
 }
 
 func decor(kind, name, description string, cost int64, maxCount []int) BuildingDef {

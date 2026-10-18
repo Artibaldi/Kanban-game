@@ -67,6 +67,9 @@ type Defense struct {
 	// Crossbow towers aim at heavy units (rams, riders); their hit points are part of TowerHP.
 	CrossbowDPS int `json:"crossbow_dps,omitempty"`
 	Crossbows   int `json:"crossbows,omitempty"`
+	// Garrison: troops colleagues sent to the team banner. They come out to fight, take blows before the towers
+	// and strike back; they are not a building and never count towards destruction.
+	Garrison map[string]int `json:"garrison,omitempty"`
 }
 
 // Visible is the defence as a rival sees it before a battle: everything but the traps.
@@ -117,6 +120,9 @@ type Round struct {
 	MortarDamage   int            `json:"mortar_damage,omitempty"`
 	CrossbowDamage int            `json:"crossbow_damage,omitempty"`
 	TrapDamage     int            `json:"trap_damage,omitempty"`
+	GarrisonDamage int            `json:"garrison_damage,omitempty"`
+	GarrisonHit    int            `json:"garrison_hit,omitempty"`
+	GarrisonHP     int            `json:"garrison_hp,omitempty"`
 	Killed         map[string]int `json:"killed"`
 	Alive          map[string]int `json:"alive"`
 	WallDamage     int            `json:"wall_damage"`
@@ -171,6 +177,15 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 	wound := map[string]float64{}
 	wall, tower, th, other := float64(d.WallHP), float64(d.TowerHP), float64(d.TownHallHP), float64(d.OtherHP)
 	totalTarget := float64(d.TowerHP + d.TownHallHP + d.OtherHP)
+	// The garrison fights as one body: its hit points and its attack, which weakens as it is worn down.
+	var garrison0, garrisonAtk float64
+	for k, n := range d.Garrison {
+		if t, ok := Troops[k]; ok && n > 0 {
+			garrison0 += float64(n * t.HP)
+			garrisonAtk += float64(n * t.Attack)
+		}
+	}
+	garrison := garrison0
 	out := Outcome{Losses: map[string]int{}, Survivors: map[string]int{}}
 	towerHealth := func() float64 {
 		if d.TowerHP == 0 {
@@ -248,6 +263,11 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 				hurt(&round, splash, byCount)
 			}
 		}
+		if garrison > 0 && count() > 0 {
+			strike := garrisonAtk * garrison / garrison0 * roll()
+			round.GarrisonDamage = int(math.Round(strike))
+			hurt(&round, strike, byHP)
+		}
 		// Traps spring once, as the troops come in.
 		if r == 1 && d.TrapDmg > 0 && count() > 0 {
 			trap := float64(d.TrapDmg) * roll()
@@ -271,6 +291,19 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 				hit = (dmg - used) / t.SiegeMult
 				if wall <= 0 {
 					round.Events = append(round.Events, "wall_breached")
+				}
+			}
+			if hit <= 0 {
+				continue
+			}
+			// The garrison meets everyone who got past the walls.
+			if garrison > 0 {
+				used := math.Min(hit, garrison)
+				garrison -= used
+				round.GarrisonHit += int(math.Round(used))
+				hit -= used
+				if garrison <= 0 {
+					round.Events = append(round.Events, "garrison_down")
 				}
 			}
 			if hit <= 0 {
@@ -310,6 +343,7 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 			round.Alive[k] = alive[k]
 		}
 		round.WallHP, round.TowerHP, round.TownHallHP, round.OtherHP = int(math.Round(wall)), int(math.Round(tower)), int(math.Round(th)), int(math.Round(other))
+		round.GarrisonHP = int(math.Round(garrison))
 		if round.Events == nil {
 			round.Events = []string{}
 		}
