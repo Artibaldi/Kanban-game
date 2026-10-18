@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Проблема безопасности
+    url: https://github.com/Artibaldi/Kanban-game/security/advisories/new
+    about: Не создавайте публичный issue — сообщите приватно, см. SECURITY.md.
