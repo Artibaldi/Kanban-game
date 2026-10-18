@@ -95,6 +95,9 @@ func ring(level int, cells ...[2]int) []seedBuilding {
 
 var inner = [][2]int{{4, 4}, {5, 4}, {6, 4}, {4, 5}, {6, 5}, {4, 6}, {5, 6}, {6, 6}}
 
+// seedShift places the demo layouts (drawn for the old 12×12 field) in the centre of the 16×16 island.
+const seedShift = (game.MaxGrid - 12) / 2
+
 func seedCities() map[string][]seedBuilding {
 	return map[string][]seedBuilding{
 		"alexey": append([]seedBuilding{{"townhall", 3, 5, 5, 0}, {"barracks", 3, 2, 2, 0}, {"barracks", 1, 2, 4, 0}, {"storage", 2, 8, 2, 0}, {"storage", 2, 9, 4, 0},
@@ -191,12 +194,12 @@ func seed(ctx context.Context, tx pgx.Tx) error {
 		for _, b := range layout {
 			if b.buildingSecs > 0 {
 				if _, err := tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,$3,$4,now()+$5*interval '1 second',$6,$7)`,
-					u.ID, b.kind, b.level, b.level+1, b.buildingSecs*20, b.x, b.y); err != nil {
+					u.ID, b.kind, b.level, b.level+1, b.buildingSecs*20, b.x+seedShift, b.y+seedShift); err != nil {
 					return err
 				}
 				continue
 			}
-			if _, err := tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,$2,$3,$4,$5)`, u.ID, b.kind, b.level, b.x, b.y); err != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,$2,$3,$4,$5)`, u.ID, b.kind, b.level, b.x+seedShift, b.y+seedShift); err != nil {
 				return err
 			}
 		}

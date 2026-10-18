@@ -26,7 +26,7 @@ func (s *Server) gameConfig(w http.ResponseWriter, r *http.Request) {
 		troops = append(troops, game.Troops[k])
 	}
 	respond(w, 200, map[string]any{
-		"grid": game.GridSize, "builders": game.MaxBuilders, "base_gold_cap": game.BaseGoldCap, "base_energy_cap": game.BaseEnergyCap,
+		"grid": game.MaxGrid, "builders": game.MaxBuilders, "base_gold_cap": game.BaseGoldCap, "base_energy_cap": game.BaseEnergyCap,
 		"buildings": defs, "troops": troops, "settings": st, "points_scale": []int{1, 2, 3, 5, 8},
 	})
 }
@@ -108,7 +108,8 @@ func cityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 	for k, def := range game.Buildings {
 		limits[k] = map[string]int{"built": c.Count(k), "allowed": def.Allowed(th)}
 	}
-	return map[string]any{"buildings": out, "limits": limits, "townhall": th}, nil
+	start, size := game.Land(th)
+	return map[string]any{"buildings": out, "limits": limits, "townhall": th, "grid": game.MaxGrid, "land": map[string]int{"start": start, "size": size}}, nil
 }
 
 func (s *Server) city(w http.ResponseWriter, r *http.Request) {
@@ -198,10 +199,16 @@ func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
 		if rf != nil {
 			return 0, nil, asAPI(rf)
 		}
-		dur := game.BuildDuration(st, spec)
 		var id string
-		if err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,0,1,now()+$3*interval '1 millisecond',$4,$5) RETURNING id::text`,
-			a.ID, in.Type, dur.Milliseconds(), in.X, in.Y).Scan(&id); err != nil {
+		if game.Buildings[in.Type].Decor {
+			// Decor is ready at once and needs no builder.
+			err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,$2,1,$3,$4) RETURNING id::text`, a.ID, in.Type, in.X, in.Y).Scan(&id)
+		} else {
+			dur := game.BuildDuration(st, spec)
+			err = tx.QueryRow(ctx, `INSERT INTO buildings(user_id,type,level,target_level,busy_until,x,y) VALUES($1,$2,0,1,now()+$3*interval '1 millisecond',$4,$5) RETURNING id::text`,
+				a.ID, in.Type, dur.Milliseconds(), in.X, in.Y).Scan(&id)
+		}
+		if err != nil {
 			return 0, nil, err
 		}
 		name := game.Buildings[in.Type].Name
@@ -369,5 +376,82 @@ func (s *Server) train(w http.ResponseWriter, r *http.Request) {
 		}
 		out, err := armyDTO(ctx, tx, a.ID)
 		return 201, out, err
+	})
+}
+
+// moveBuilding: «Переставить» — free and instant, onto a free cell of the player's land.
+func (s *Server) moveBuilding(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			X int `json:"x"`
+			Y int `json:"y"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		_, c, _, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		b, ok := c.Find(id)
+		if !ok {
+			return 0, nil, refuse(404, "not_found", "Здание не найдено.")
+		}
+		if rf := game.CheckMove(c, b, in.X, in.Y); rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE buildings SET x=$2, y=$3 WHERE id=$1`, id, in.X, in.Y); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 200, out, err
+	})
+}
+
+// removeDecor: decor can be taken away; its gold is not returned. Real buildings stay.
+func (s *Server) removeDecor(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, _ []byte) (int, any, error) {
+		_, c, _, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		b, ok := c.Find(id)
+		if !ok {
+			return 0, nil, refuse(404, "not_found", "Здание не найдено.")
+		}
+		if !game.Buildings[b.Type].Decor {
+			return 0, nil, refuse(409, "not_decor", "Убрать можно только украшения: здания города остаются.")
+		}
+		if _, err = tx.Exec(ctx, `DELETE FROM buildings WHERE id=$1`, id); err != nil {
+			return 0, nil, err
+		}
+		out, err := cityDTO(ctx, tx, a.ID)
+		if err != nil {
+			return 0, nil, err
+		}
+		out["player"], err = playerState(ctx, tx, a.ID)
+		return 200, out, err
 	})
 }

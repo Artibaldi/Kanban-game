@@ -249,16 +249,16 @@ func TestEndToEnd(t *testing.T) {
 	unagreed := findTask(t, dmitry, "Шаблоны писем")
 	dmitry.refused("estimate_not_agreed", "POST", "/tasks/"+unagreed["id"].(string)+"/transition", map[string]any{"to": "in_progress"})
 
-	// 4. City: build a wall, wait for the server timer, upgrade it; a player without gold is refused.
-	city := alexey.must(201, "POST", "/city/buildings", map[string]any{"type": "wall", "x": 0, "y": 0}, "")
+	// 4. City (cell 2,2 is the corner of the original field in the centre of the island): build a wall, wait for the server timer, upgrade it; a player without gold is refused.
+	city := alexey.must(201, "POST", "/city/buildings", map[string]any{"type": "wall", "x": 2, "y": 2}, "")
 	var wallID string
 	for _, b := range city.Body["buildings"].([]any) {
 		bm := b.(map[string]any)
-		if bm["type"] == "wall" && num(bm["x"]) == 0 && num(bm["y"]) == 0 {
+		if bm["type"] == "wall" && num(bm["x"]) == 2 && num(bm["y"]) == 2 {
 			wallID = bm["id"].(string)
 		}
 	}
-	alexey.refused("cell_occupied", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 0, "y": 0})
+	alexey.refused("cell_occupied", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 2, "y": 2})
 	waitFor(t, "wall built", func() bool {
 		var lvl int
 		_ = pool.QueryRow(ctx, `SELECT level FROM buildings WHERE id=$1 AND busy_until IS NULL`, wallID).Scan(&lvl)
@@ -268,7 +268,7 @@ func TestEndToEnd(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE players SET gold=10 WHERE user_id=(SELECT id FROM users WHERE login='dmitry')`); err != nil {
 		t.Fatal(err)
 	}
-	dmitry.refused("insufficient_gold", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 0, "y": 0})
+	dmitry.refused("insufficient_gold", "POST", "/city/buildings", map[string]any{"type": "wall", "x": 2, "y": 2})
 
 	// 5. Army and a friendly duel: no energy, no losses, no trophies; a daily limit; only colleagues who accept duels.
 	alexey.must(201, "POST", "/army/train", map[string]any{"type": "guard", "count": 2}, "")

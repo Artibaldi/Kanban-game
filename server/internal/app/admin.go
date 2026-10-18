@@ -131,7 +131,7 @@ func ensurePlayer(ctx context.Context, tx pgx.Tx, userID string) error {
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,'townhall',1,$2,$2)`, userID, game.GridSize/2-1); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) VALUES($1,'townhall',1,$2,$2)`, userID, game.MaxGrid/2-1); err != nil {
 		return err
 	}
 	_, err = applyLedger(ctx, tx, ledgerEntry{UserID: userID, Kind: "seed", Gold: st.StartGold, Energy: st.StartEnergy, Note: "Стартовый запас города"})

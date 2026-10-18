@@ -81,6 +81,8 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/city", s.city)
 		r.Post("/city/buildings", s.placeBuilding)
 		r.Post("/city/buildings/{id}/upgrade", s.upgradeBuilding)
+		r.Post("/city/buildings/{id}/move", s.moveBuilding)
+		r.Delete("/city/buildings/{id}", s.removeDecor)
 		r.Get("/army", s.army)
 		r.Post("/army/train", s.train)
 		r.Get("/duels", s.duels)
