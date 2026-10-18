@@ -46,7 +46,7 @@ watch(team, loadTeam)
     <div class="page-head">
       <div>
         <p class="eyebrow">{{ teams.find(t => t.id === team)?.name || session.me?.team_name }}</p>
-        <h1>Прогресс</h1>
+        <h1>Прогресс<span class="sub">мой и команды</span></h1>
       </div>
       <select v-if="session.isAdmin && teams.length" v-model="team" class="select narrow" aria-label="Команда">
         <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>

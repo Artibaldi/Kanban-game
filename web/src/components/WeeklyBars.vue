@@ -11,7 +11,7 @@ const desc = computed(() => props.label + ': ' + props.weeks.map((w, i) => `не
 <template>
   <svg :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="desc" class="wb">
     <g v-for="(v, i) in values" :key="i">
-      <rect :x="pad + i * (bw + 8) + 4" :y="H - 24 - (v / max) * (H - 50)" :width="bw" :height="Math.max(1, (v / max) * (H - 50))" rx="3" :class="{ cur: i === values.length - 1 }" />
+      <rect :x="pad + i * (bw + 8) + 4" :y="H - 24 - (v / max) * (H - 50)" :width="bw" :height="Math.max(1, (v / max) * (H - 50))" rx="6" :class="{ cur: i === values.length - 1 }" />
       <text :x="pad + i * (bw + 8) + 4 + bw / 2" :y="H - 28 - (v / max) * (H - 50)" text-anchor="middle" class="v">{{ v || '' }}</text>
       <text :x="pad + i * (bw + 8) + 4 + bw / 2" :y="H - 8" text-anchor="middle" class="w">{{ date(weeks[i]) }}</text>
     </g>
@@ -20,8 +20,8 @@ const desc = computed(() => props.label + ': ' + props.weeks.map((w, i) => `не
 
 <style scoped>
 .wb { width: 100%; height: auto; display: block; }
-rect { fill: color-mix(in srgb, var(--color-action-primary) 45%, transparent); }
-rect.cur { fill: var(--color-action-primary); }
+rect { fill: color-mix(in srgb, var(--stage-done) 40%, transparent); }
+rect.cur { fill: var(--stage-done); }
 .v { fill: var(--color-text); font-size: 11px; font-weight: 700; }
 .w { fill: var(--color-text-muted); font-size: 9.5px; }
 </style>
