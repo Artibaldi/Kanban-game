@@ -7,6 +7,7 @@ import GameOff from '../components/GameOff.vue'
 import Portrait3D from '../components/Portrait3D.vue'
 import { api } from '../api'
 import { placeBlock, specLines, upgradeBlock } from '../lib/city'
+import MarketPanel from '../components/MarketPanel.vue'
 import { duration, num } from '../lib/format'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
@@ -59,7 +60,8 @@ const player = computed(() => game.player)
 const defs = computed(() => game.config?.buildings.filter(d => d.type !== 'townhall' && !d.decor) || [])
 const decorDefs = computed(() => game.config?.buildings.filter(d => d.decor) || [])
 const isDecor = (t: BuildingType) => !!game.building(t)?.decor
-const builders = computed(() => game.config?.builders || 2)
+// Huts add builders: the player's own count, not the base one from the config.
+const builders = computed(() => game.player?.builders || game.config?.builders || 2)
 const busyList = computed(() => city.value?.buildings.filter(b => b.busy_until) || [])
 
 function select(b: CityBuilding) {
@@ -193,6 +195,7 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
             <p v-if="upgradeBlock(selected, city, player, builders)" class="reason">{{ upgradeBlock(selected, city, player, builders) }}</p>
           </template>
           <p v-else-if="!isDecor(selected.type)" class="desc">Максимальный уровень.</p>
+          <MarketPanel v-if="selected.type === 'market' && selected.level >= 1 && player" :fee-pct="selected.spec.fee_pct || 30" :player="player" />
         </section>
 
         <section class="g-panel build-panel">

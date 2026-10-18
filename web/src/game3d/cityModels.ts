@@ -164,6 +164,82 @@ function tavern(k: Kit, g: THREE.Group, level: number) {
   }
 }
 
+/** Builder hut: a small plank cabin with a straw roof, a saw on the wall, a workbench and a stack of beams. */
+function hut(k: Kit, g: THREE.Group) {
+  const H = k.grp(g)
+  H.rotation.y = 0.4
+  const w = 1.1, d = 0.95, wh = 0.62
+  k.mk(k.rb(w + 0.18, 0.14, d + 0.18, 0.05), k.M(0xa79e8a), 0, 0.08, 0, H)
+  k.mk(k.rb(w, wh, d, 0.08), k.M(WOOD), 0, 0.15 + wh / 2, 0, H)
+  for (let y = 0.3; y < wh; y += 0.18) k.mk(k.rb(w + 0.02, 0.04, d + 0.02, 0.02), k.M(WOOD_D), 0, 0.15 + y, 0, H)
+  k.mk(gable(k, d + 0.35, 0.6, w + 0.3), k.M(STRAW), 0, 0.15 + wh + 0.02, 0, H).rotation.y = Math.PI / 2
+  k.mk(k.rb(0.32, 0.46, 0.06, 0.04), k.M(0x5a3418), -0.2, 0.38, d / 2 + 0.02, H)
+  // A saw and a hammer hung by the door.
+  k.mk(k.rb(0.36, 0.1, 0.03, 0.01), k.M(0xdde4ee), 0.28, 0.55, d / 2 + 0.03, H)
+  k.mk(k.rb(0.1, 0.12, 0.03, 0.01), k.M(WOOD_D), 0.1, 0.55, d / 2 + 0.03, H)
+  // Workbench with a hammer, and beams waiting to be used.
+  const B = k.grp(g, 0.8, 0, 0.55)
+  k.mk(k.rb(0.6, 0.06, 0.3, 0.02), k.M(WOOD), 0, 0.36, 0, B)
+  for (const x of [-0.24, 0.24]) k.mk(k.rb(0.06, 0.34, 0.24, 0.01), k.M(WOOD_D), x, 0.17, 0, B)
+  k.mk(k.cyl(0.02, 0.02, 0.3, 6), k.M(WOOD_D), 0.05, 0.41, 0, B).rotation.z = Math.PI / 2
+  k.mk(k.rb(0.1, 0.07, 0.07, 0.02), k.M(METAL), -0.1, 0.41, 0, B)
+  for (let i = 0; i < 3; i++) k.mk(k.rb(0.9, 0.1, 0.1, 0.02), k.M(i % 2 ? WOOD : 0xc88b4f), -0.75, 0.07 + i * 0.1, 0.55 - (i % 2) * 0.05, g).rotation.y = 0.3
+}
+
+/** Market: a stall with a striped awning, crates of gold and energy crystals, and scales; stone base and a second stall at 2, gold trim at 3. */
+function market(k: Kit, g: THREE.Group, level: number, live: Live) {
+  const H = k.grp(g)
+  H.rotation.y = -0.3
+  const stall = (x: number, z: number, stripe: number) => {
+    const S = k.grp(H, x, 0, z)
+    k.mk(k.rb(1.1, 0.5, 0.6, 0.06), k.M(level >= 2 ? STONE : WOOD), 0, 0.35, 0, S)
+    k.mk(k.rb(1.16, 0.07, 0.66, 0.03), k.M(WOOD_D), 0, 0.62, 0, S)
+    for (const px of [-0.52, 0.52]) for (const pz of [-0.27, 0.27]) k.mk(k.cyl(0.03, 0.03, 0.75, 6), k.M(WOOD_D), px, 0.98, pz, S)
+    // The awning: alternating stripes, tilted forward.
+    const A = k.grp(S, 0, 1.38, 0)
+    A.rotation.x = 0.28
+    for (let i = 0; i < 6; i++) k.mk(k.rb(0.2, 0.05, 0.86, 0.02), k.M(i % 2 ? 0xfff3d6 : stripe), -0.5 + i * 0.2, 0, 0, A)
+    if (level >= 3) k.mk(k.rb(1.24, 0.06, 0.06, 0.02), k.M(GOLD), 0, -0.03, 0.43, A)
+    return S
+  }
+  const S = stall(0, 0, 0xd0453a)
+  // Goods: a crate of coins and a crate of glowing crystals, and balance scales between them.
+  k.mk(k.rb(0.3, 0.12, 0.3, 0.03), k.M(WOOD), -0.3, 0.71, 0, S)
+  for (let i = 0; i < 5; i++) k.mk(k.cyl(0.07, 0.07, 0.03, 10), k.M(0xffe27a), -0.36 + (i % 3) * 0.07, 0.8 + Math.floor(i / 3) * 0.03, -0.05 + (i % 2) * 0.08, S)
+  k.mk(k.rb(0.3, 0.12, 0.3, 0.03), k.M(WOOD), 0.3, 0.71, 0, S)
+  for (const [x, z] of [[0.25, -0.04], [0.35, 0.06]]) k.mk(k.geo('oct', () => new THREE.OctahedronGeometry(0.36, 0)), k.M(0x8a6cff, { emissive: 0x6a4cff, emissiveIntensity: 0.5 }), x, 0.85, z, S).scale.setScalar(0.22)
+  k.mk(k.cyl(0.02, 0.02, 0.3, 6), k.M(GOLD), 0, 0.83, 0, S)
+  k.mk(k.rb(0.36, 0.02, 0.02, 0.01), k.M(GOLD), 0, 0.98, 0, S)
+  for (const x of [-0.17, 0.17]) k.mk(k.cyl(0.07, 0.05, 0.03, 10), k.M(GOLD), x, 0.92, 0, S)
+  if (level >= 2) {
+    const S2 = stall(0.05, -0.85, 0x3e8ef0)
+    for (let i = 0; i < 3; i++) k.mk(k.sph(0.09, 8, 6), k.M([0xf04848, 0x7cc242, 0xffb84a][i]), -0.25 + i * 0.25, 0.72, 0, S2)
+  }
+  const lamp = k.glow(0xffc46a, 0.9, 0.5)
+  lamp.position.set(0, 1.2, 0.4)
+  H.add(lamp)
+  live.glows ??= []
+  live.glows.push(lamp)
+}
+
+/** Crystal well: a stone ring holding a glowing energy crystal; taller crystal and more stones by level. */
+function well(k: Kit, g: THREE.Group, level: number, live: Live) {
+  const r = 0.62 + level * 0.04
+  k.mk(k.cyl(r + 0.12, r + 0.18, 0.16, 16), k.M(STONE_D), 0, 0.08, 0, g)
+  k.mk(k.cyl(r, r + 0.04, 0.42, 16), k.M(level >= 2 ? STONE_L : STONE), 0, 0.37, 0, g)
+  k.mk(k.cyl(r - 0.12, r - 0.12, 0.05, 16), k.M(0x7a5cff, { emissive: 0x5a3cff, emissiveIntensity: 0.6 }), 0, 0.57, 0, g)
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; k.mk(k.rb(0.2, 0.1, 0.14, 0.03), k.M(i % 2 ? STONE_L : STONE), Math.cos(a) * r, 0.62, Math.sin(a) * r, g).rotation.y = -a }
+  const c = k.mk(k.geo('oct', () => new THREE.OctahedronGeometry(0.36, 0)), k.M(0xa58cff, { emissive: 0x6a4cff, emissiveIntensity: 0.75 }), 0, 1.0 + level * 0.08, 0, g)
+  c.scale.set(0.8, 1.3 + level * 0.15, 0.8)
+  for (let i = 0; i < level; i++) { const a = i * 2.1 + 0.4; const sm = k.mk(k.geo('oct', () => new THREE.OctahedronGeometry(0.36, 0)), k.M(0xc4b2ff, { emissive: 0x6a4cff, emissiveIntensity: 0.5 }), Math.cos(a) * 0.3, 0.72, Math.sin(a) * 0.3, g); sm.scale.set(0.3, 0.5, 0.3); sm.rotation.z = 0.3 }
+  if (level >= 3) for (const x of [-r - 0.05, r + 0.05]) { k.mk(k.cyl(0.05, 0.05, 1.0, 6), k.M(METAL), x, 0.6, 0, g); k.mk(k.sph(0.07, 8, 6), k.M(GOLD), x, 1.12, 0, g) }
+  const gl = k.glow(0x9c84ff, 1.8, 0.75)
+  gl.position.set(0, 1.0 + level * 0.08, 0)
+  g.add(gl)
+  live.glows ??= []
+  live.glows.push(gl)
+}
+
 /** Decor: road pavers that join their neighbours, trees, a flower bed, a lantern, a pond. Looks only. */
 function road(k: Kit, g: THREE.Group, joins: { e: boolean; s: boolean }) {
   k.mk(k.rb(1.5, 0.06, 1.5, 0.04), k.M(0xc9b48c), 0, 0.04, 0, g)
@@ -270,6 +346,9 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
     case 'wall': wall(k, inner, Math.min(5, L), joins); break
     case 'tower': tower(k, inner, Math.min(5, L)); break
     case 'tavern': tavern(k, inner, Math.min(3, L)); inner.scale.setScalar(0.85); break
+    case 'hut': hut(k, inner); inner.scale.setScalar(0.9); break
+    case 'market': market(k, inner, Math.min(3, L), live); inner.scale.setScalar(1.05); break
+    case 'well': well(k, inner, Math.min(3, L), live); break
     case 'road': road(k, inner, joins); break
     case 'tree': tree(k, inner, joins.s); break
     case 'flowers': flowers(k, inner); break

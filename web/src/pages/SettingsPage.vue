@@ -14,7 +14,7 @@ const theme = ref<ThemeChoice>(loadTheme())
 const ledger = ref<LedgerItem[]>([])
 const kind: Record<string, string> = {
   seed: 'Стартовый запас', task_reward: 'Награда за задачу', task_reward_reversal: 'Отмена награды', build: 'Постройка', upgrade: 'Улучшение',
-  train: 'Обучение войск', attack: 'Атака', battle_reward: 'Награда за бой', admin: 'Корректировка',
+  train: 'Обучение войск', attack: 'Атака', battle_reward: 'Награда за бой', admin: 'Корректировка', wave_reward: 'Сундук волны', market: 'Рынок',
 }
 onMounted(async () => {
   if (!session.plays) return
