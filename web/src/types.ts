@@ -46,11 +46,11 @@ export interface Player {
 }
 
 export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond'
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | DecorType
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | DecorType
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
-  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number
+  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number
 }
 export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean }
 export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number }
