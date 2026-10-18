@@ -10,7 +10,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
-    "pinia": "^3.0.3",
+    "pinia": "^4.1.0",
     "three": "^0.170.0",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"
