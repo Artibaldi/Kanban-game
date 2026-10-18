@@ -7,7 +7,8 @@ export function placeBlock(def: BuildingDef, city: City, player: Player, builder
   if (city.townhall < spec.requires_th) return `Нужна ратуша ${spec.requires_th} уровня.`
   const lim = city.limits[def.type]
   if (lim && lim.built >= lim.allowed) return `Лимит для ратуши ${city.townhall}: ${lim.allowed}. Улучшите ратушу.`
-  if (player.builders_busy >= builders) return 'Все строители заняты.'
+  // Decor is placed at once and needs no builder.
+  if (!def.decor && player.builders_busy >= builders) return 'Все строители заняты.'
   if (player.gold < spec.cost) return `Не хватает ${spec.cost - player.gold} золота.`
   return ''
 }

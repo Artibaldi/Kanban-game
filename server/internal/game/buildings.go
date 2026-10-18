@@ -7,7 +7,8 @@ import (
 )
 
 const (
-	GridSize    = 12
+	// MaxGrid is the whole island; the land a player can build on grows from its centre with the town hall.
+	MaxGrid     = 16
 	MaxBuilders = 2
 	// Base caps provided by the town hall itself, before any storage.
 	BaseGoldCap   = 600
@@ -37,6 +38,8 @@ type BuildingDef struct {
 	MaxCount []int       `json:"max_count"`
 	Levels   []LevelSpec `json:"levels"`
 	Defense  bool        `json:"defense"`
+	// Decor: looks only — instant, no builder, no hit points, never part of a defence.
+	Decor bool `json:"decor,omitempty"`
 }
 
 func (d BuildingDef) MaxLevel() int { return len(d.Levels) }
@@ -61,7 +64,27 @@ func (d BuildingDef) Allowed(thLevel int) int {
 }
 
 // BuildingOrder is the order buildings are offered in the city.
-var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern"}
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "road", "tree", "flowers", "lantern", "pond"}
+
+// Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
+// 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
+func Land(townHall int) (start, size int) {
+	switch {
+	case townHall >= 4:
+		size = 16
+	case townHall == 3:
+		size = 14
+	default:
+		size = 12
+	}
+	return (MaxGrid - size) / 2, size
+}
+
+// InLand: the cell is on the player's land.
+func InLand(townHall, x, y int) bool {
+	start, size := Land(townHall)
+	return x >= start && y >= start && x < start+size && y < start+size
+}
 
 var Buildings = map[string]BuildingDef{
 	"townhall": {
@@ -115,6 +138,12 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 560},
 		},
 	},
+	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.
+	"road":    decor("road", "Дорога", "Мостовая между зданиями. Укладывается цепочкой.", 5, []int{40, 60, 80, 100, 120}),
+	"tree":    decor("tree", "Дерево", "Тень и зелень во дворе.", 15, []int{6, 10, 14, 18, 22}),
+	"flowers": decor("flowers", "Клумба", "Цветы у дорожек.", 10, []int{6, 10, 14, 18, 22}),
+	"lantern": decor("lantern", "Фонарь", "Свет на улицах города.", 20, []int{4, 6, 8, 10, 12}),
+	"pond":    decor("pond", "Пруд", "Вода с кувшинками.", 40, []int{1, 1, 2, 2, 3}),
 	"tower": {
 		Type: "tower", Name: "Башня", Description: "Стреляет по атакующим каждый раунд боя.", Defense: true,
 		MaxCount: []int{1, 2, 3, 4, 5},
@@ -232,8 +261,8 @@ func CheckPlace(c City, kind string, x, y int, gold int64) (LevelSpec, *Refusal)
 	if !ok || kind == "townhall" {
 		return LevelSpec{}, refuse("invalid_building", "Такое здание построить нельзя.")
 	}
-	if x < 0 || y < 0 || x >= GridSize || y >= GridSize {
-		return LevelSpec{}, refuse("invalid_cell", "Клетка за пределами поля.")
+	if !InLand(c.TownHall(), x, y) {
+		return LevelSpec{}, refuse("invalid_cell", "Клетка за пределами вашей земли. Земля растёт с уровнем ратуши.")
 	}
 	if c.Occupied(x, y) {
 		return LevelSpec{}, refuse("cell_occupied", "Клетка уже занята.")
@@ -246,7 +275,7 @@ func CheckPlace(c City, kind string, x, y int, gold int64) (LevelSpec, *Refusal)
 	if c.Count(kind) >= def.Allowed(th) {
 		return LevelSpec{}, refuse("building_limit", "Достигнут лимит таких зданий для текущего уровня ратуши.")
 	}
-	if c.BuildersBusy() >= MaxBuilders {
+	if !def.Decor && c.BuildersBusy() >= MaxBuilders {
 		return LevelSpec{}, refuse("builders_busy", "Все строители заняты. Дождитесь окончания стройки.")
 	}
 	if gold < spec.Cost {
@@ -279,4 +308,33 @@ func CheckUpgrade(c City, b Building, gold int64, playerLevel int) (LevelSpec, *
 		return LevelSpec{}, refuse("insufficient_gold", "Недостаточно золота.")
 	}
 	return spec, nil
+}
+
+// CheckMove validates moving building b to (x, y): free and instant, anywhere on the player's land.
+func CheckMove(c City, b Building, x, y int) *Refusal {
+	if b.X == x && b.Y == y {
+		return refuse("same_cell", "Здание уже стоит здесь.")
+	}
+	if !InLand(c.TownHall(), x, y) {
+		return refuse("invalid_cell", "Клетка за пределами вашей земли. Земля растёт с уровнем ратуши.")
+	}
+	if c.Occupied(x, y) {
+		return refuse("cell_occupied", "Клетка уже занята.")
+	}
+	return nil
+}
+
+func decor(kind, name, description string, cost int64, maxCount []int) BuildingDef {
+	return BuildingDef{Type: kind, Name: name, Description: description, Decor: true, MaxCount: maxCount,
+		Levels: []LevelSpec{{Level: 1, Cost: cost, Seconds: 0, RequiresTH: 1, HP: 0}}}
+}
+
+// Find returns the building with the given id.
+func (c City) Find(id string) (Building, bool) {
+	for _, b := range c.Buildings {
+		if b.ID == id {
+			return b, true
+		}
+	}
+	return Building{}, false
 }

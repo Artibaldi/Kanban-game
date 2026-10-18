@@ -140,8 +140,8 @@ async function attack() {
       <section v-if="selected" class="g-panel target">
         <span class="g-ribbon" :class="{ gold: challengeId }"><b>{{ challengeId ? 'Вызов: ' : '' }}{{ selected.display_name }}</b></span>
         <div class="preview">
-          <CityScene3D v-if="preview && !flat" :buildings="preview.buildings" :grid="game.config?.grid || 12" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flat = true" />
-          <CityScene v-else-if="preview" :buildings="preview.buildings" :grid="game.config?.grid" compact :show-levels="true" :label="`Город коллеги ${selected.display_name}`" />
+          <CityScene3D v-if="preview && !flat" :buildings="preview.buildings" :grid="preview?.grid || game.config?.grid || 16" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flat = true" />
+          <CityScene v-else-if="preview" :buildings="preview.buildings" :grid="preview?.grid || game.config?.grid || 16" compact :show-levels="true" :label="`Город коллеги ${selected.display_name}`" />
           <p v-else class="loading">Загрузка города…</p>
           <span class="th-chip g-stroke s2">Ратуша {{ selected.townhall }}</span>
         </div>

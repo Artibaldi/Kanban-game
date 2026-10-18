@@ -6,12 +6,13 @@ import { duration } from '../lib/format'
 import type { BuildingType, CityBuilding } from '../types'
 import type { CityStage } from '../game3d/cityStage'
 
-const props = defineProps<{ buildings: CityBuilding[]; grid: number; selectedId: string | null; placing: BuildingType | null; now: number; readonly?: boolean }>()
+// `placing` is a building type to build, or 'move' while an existing building is being moved.
+const props = defineProps<{ buildings: CityBuilding[]; grid: number; selectedId: string | null; placing: BuildingType | 'move' | null; now: number; readonly?: boolean; land?: { start: number; size: number } }>()
 const emit = defineEmits<{ select: [b: CityBuilding]; deselect: []; cell: [x: number, y: number]; unavailable: [] }>()
 const canvas = ref<HTMLCanvasElement>()
 const labels = ref<HTMLElement>()
 const stage = shallowRef<CityStage | null>(null)
-const cursor = ref({ x: Math.floor(props.grid / 2), y: Math.floor(props.grid / 2) })
+const cursor = ref({ x: Math.floor(props.grid / 2) - 1, y: Math.floor(props.grid / 2) - 1 })
 const announce = ref('')
 let unmounted = false
 
@@ -34,6 +35,7 @@ onMounted(async () => {
     s.onLost = () => emit('unavailable')
     // Mouse and keyboard share one cursor.
     s.onHoverCell = c => { cursor.value = c }
+    if (props.land) s.setLand(props.land.start, props.land.size)
     s.sync(items(), false)
     s.setTimers(timers())
     s.select(props.selectedId)
@@ -45,6 +47,7 @@ onUnmounted(() => { unmounted = true; stage.value?.dispose() })
 
 watch(() => props.buildings, () => { stage.value?.sync(items(), true); stage.value?.setTimers(timers()) })
 watch(() => props.now, () => stage.value?.setTimers(timers()))
+watch(() => props.land, l => { if (l) stage.value?.setLand(l.start, l.size) })
 watch(() => props.selectedId, id => { stage.value?.select(id); stage.value?.setTimers(timers()) })
 watch(() => props.placing, p => {
   stage.value?.setPlacing(!!p)
@@ -58,8 +61,9 @@ function onKey(e: KeyboardEvent) {
   const d: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
   if (d[e.key]) {
     e.preventDefault()
-    const c = cursor.value
-    cursor.value = { x: Math.min(props.grid - 1, Math.max(0, c.x + d[e.key][0])), y: Math.min(props.grid - 1, Math.max(0, c.y + d[e.key][1])) }
+    // The cursor stays on the player's land: nothing can be built beyond it.
+    const c = cursor.value, lo = props.land?.start ?? 0, hi = props.land ? props.land.start + props.land.size - 1 : props.grid - 1
+    cursor.value = { x: Math.min(hi, Math.max(lo, c.x + d[e.key][0])), y: Math.min(hi, Math.max(lo, c.y + d[e.key][1])) }
     stage.value?.setCursor(cursor.value)
     const taken = props.buildings.find(b => b.x === cursor.value.x && b.y === cursor.value.y)
     announce.value = `Клетка ${cursor.value.x + 1}:${cursor.value.y + 1}${taken ? `, занята: ${taken.name}` : ', свободна'}`

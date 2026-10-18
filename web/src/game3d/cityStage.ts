@@ -38,6 +38,9 @@ export class CityStage {
   private puffs: { m: THREE.Mesh; life: number }[] = []
   private smokeT = 0
   private ground: THREE.Mesh
+  private groundTex!: THREE.CanvasTexture
+  /** The player's land: the centred square they may build on; the rest of the island waits under a haze. */
+  private land = { start: 0, size: 0 }
   private tmp = new THREE.Vector3()
   onPick: (id: string | null) => void = () => {}
   onCell: (x: number, y: number) => void = () => {}
@@ -59,8 +62,9 @@ export class CityStage {
     this.world = k.grp(this.scene)
     // The island: a checkered meadow on a slab of earth, with a margin for trees.
     const size = N * CELL, m = CELL * 1.6
-    const tex = k.canvasTex(N, N, g => { for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { g.fillStyle = (x + y) % 2 ? '#7CC242' : '#86C94C'; g.fillRect(x, y, 1, 1) } })
+    const tex = (this.groundTex = k.canvasTex(N * 8, N * 8, () => {}))
     tex.magFilter = THREE.NearestFilter
+    this.paintGround()
     k.mk(k.rb(size + m * 2, 0.6, size + m * 2, 0.25), k.M(0x8f5e33), 0, -0.4, 0, this.world)
     k.mk(k.rb(size + m * 2 - 0.2, 0.5, size + m * 2 - 0.2, 0.22), k.M(0xb07a45), 0, -0.05, 0, this.world)
     k.mk(k.rb(size + m * 2, 0.16, size + m * 2, 0.08), k.M(0x6db83a), 0, 0.12, 0, this.world)
@@ -106,6 +110,34 @@ export class CityStage {
   /** project: a scene point to canvas pixels (for floating numbers). */
   project(v: THREE.Vector3): [number, number] { return this.toScreen(this.world.localToWorld(v.clone())) }
 
+  /** setLand: which part of the island is the player's; redraws the meadow. */
+  setLand(start: number, size: number) {
+    if (this.land.start === start && this.land.size === size) return
+    this.land = { start, size }
+    this.paintGround()
+    if (this.placing) this.showFree()
+  }
+  private inLand(x: number, y: number) {
+    const { start, size } = this.land
+    return size === 0 || (x >= start && y >= start && x < start + size && y < start + size)
+  }
+  private paintGround() {
+    const c = this.groundTex.image as HTMLCanvasElement, g = c.getContext('2d')!, s = c.width / this.N
+    for (let y = 0; y < this.N; y++) for (let x = 0; x < this.N; x++) {
+      const mine = this.inLand(x, y)
+      g.fillStyle = mine ? ((x + y) % 2 ? '#7CC242' : '#86C94C') : ((x + y) % 2 ? '#A9BC8E' : '#B2C497')
+      g.fillRect(x * s, y * s, s, s)
+    }
+    const { start, size } = this.land
+    if (size && size < this.N) {
+      g.strokeStyle = 'rgba(255,255,255,0.85)'
+      g.lineWidth = 2
+      g.setLineDash([6, 4])
+      g.strokeRect(start * s + 1, start * s + 1, size * s - 2, size * s - 2)
+    }
+    this.groundTex.needsUpdate = true
+  }
+
   /** cellPos: the centre of a grid cell in the scene. */
   cellPos(x: number, y: number) { return new THREE.Vector3((x - (this.N - 1) / 2) * CELL, 0.21, (y - (this.N - 1) / 2) * CELL) }
 
@@ -113,6 +145,7 @@ export class CityStage {
   sync(items: CityItem[], animate: boolean) {
     const k = this.kit
     const walls = new Set(items.filter(i => i.type === 'wall').map(i => `${i.x},${i.y}`))
+    const roads = new Set(items.filter(i => i.type === 'road').map(i => `${i.x},${i.y}`))
     this.occupied = new Set(items.map(i => `${i.x},${i.y}`))
     if (items.length) {
       const xs = items.map(i => i.x), ys = items.map(i => i.y)
@@ -123,7 +156,9 @@ export class CityStage {
     const ids = new Set(items.map(i => i.id))
     for (const [id, p] of this.placed) if (!ids.has(id)) this.removePlaced(p)
     for (const it of items) {
-      const joins = it.type === 'wall' ? { e: walls.has(`${it.x + 1},${it.y}`), s: walls.has(`${it.x},${it.y + 1}`) } : { e: false, s: false }
+      // Walls and roads join their east/south neighbours of the same kind; trees alternate pine and leafy.
+      const same = it.type === 'wall' ? walls : it.type === 'road' ? roads : null
+      const joins = same ? { e: same.has(`${it.x + 1},${it.y}`), s: same.has(`${it.x},${it.y + 1}`) } : { e: false, s: it.type === 'tree' && (it.x + it.y) % 2 === 0 }
       const jk = `${joins.e}${joins.s}`
       const was = this.placed.get(it.id)
       const isNew = !was
@@ -213,7 +248,7 @@ export class CityStage {
     const mtx = new THREE.Matrix4()
     let n = 0
     for (let y = 0; y < this.N; y++) for (let x = 0; x < this.N; x++) {
-      if (this.occupied.has(`${x},${y}`)) continue
+      if (this.occupied.has(`${x},${y}`) || !this.inLand(x, y)) continue
       const p = this.cellPos(x, y)
       mtx.makeTranslation(p.x, 0.215, p.z)
       this.freeMarks.setMatrixAt(n++, mtx)
@@ -224,7 +259,7 @@ export class CityStage {
   /** setCursor: the highlighted cell while placing (also driven by the keyboard). */
   setCursor(c: { x: number; y: number } | null) {
     if (!c || !this.placing) { this.cursor.visible = false; return }
-    const free = !this.occupied.has(`${c.x},${c.y}`)
+    const free = !this.occupied.has(`${c.x},${c.y}`) && this.inLand(c.x, c.y)
     this.cursor.position.copy(this.cellPos(c.x, c.y)).setY(0.22)
     ;(this.cursor.material as THREE.MeshBasicMaterial).color.setHex(free ? 0x5cc02e : 0xf04848)
     this.cursor.visible = true
@@ -269,7 +304,7 @@ export class CityStage {
     if (!d || d.moved || !this.interactive) return
     if (this.placing) {
       const c = this.cellAt(ev.clientX, ev.clientY)
-      if (c && !this.occupied.has(`${c.x},${c.y}`)) this.onCell(c.x, c.y)
+      if (c && !this.occupied.has(`${c.x},${c.y}`) && this.inLand(c.x, c.y)) this.onCell(c.x, c.y)
       return
     }
     const hit = this.ray(ev.clientX, ev.clientY).intersectObjects([...this.placed.values()].map(p => p.model), true)[0]

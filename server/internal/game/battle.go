@@ -59,7 +59,7 @@ func DefenseOf(c City) Defense {
 	d := Defense{TownHall: c.TownHall()}
 	for _, b := range c.Buildings {
 		spec, ok := Buildings[b.Type].Spec(b.Level)
-		if !ok {
+		if !ok || Buildings[b.Type].Decor {
 			continue
 		}
 		switch b.Type {
