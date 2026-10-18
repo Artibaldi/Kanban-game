@@ -215,7 +215,11 @@ func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
 		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "build", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: name + ": постройка"}); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.started", "building", id, fmt.Sprintf("%s: строится (%d золота)", name, spec.Cost)); err != nil {
+		summary := fmt.Sprintf("%s: строится (%d золота)", name, spec.Cost)
+		if game.Buildings[in.Type].Decor {
+			summary = fmt.Sprintf("%s: поставлено (%d золота)", name, spec.Cost)
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "building.started", "building", id, summary); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
@@ -412,6 +416,9 @@ func (s *Server) moveBuilding(w http.ResponseWriter, r *http.Request) {
 		if _, err = tx.Exec(ctx, `UPDATE buildings SET x=$2, y=$3 WHERE id=$1`, id, in.X, in.Y); err != nil {
 			return 0, nil, err
 		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "building.moved", "building", id, fmt.Sprintf("%s: переставлено", game.Buildings[b.Type].Name)); err != nil {
+			return 0, nil, err
+		}
 		out, err := cityDTO(ctx, tx, a.ID)
 		if err != nil {
 			return 0, nil, err
@@ -445,6 +452,9 @@ func (s *Server) removeDecor(w http.ResponseWriter, r *http.Request) {
 			return 0, nil, refuse(409, "not_decor", "Убрать можно только украшения: здания города остаются.")
 		}
 		if _, err = tx.Exec(ctx, `DELETE FROM buildings WHERE id=$1`, id); err != nil {
+			return 0, nil, err
+		}
+		if err = audit(ctx, tx, a.ID, a.TeamID, "decor.removed", "building", id, fmt.Sprintf("%s: убрано", game.Buildings[b.Type].Name)); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)

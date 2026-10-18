@@ -140,9 +140,9 @@ function roundText(r: Battle['rounds'][number]) {
     <div v-if="!b" class="muted">Загрузка боя…</div>
     <template v-else>
       <section class="arena" aria-label="Повтор боя">
-        <BattleScene3D v-if="city && !flat" ref="scene" :buildings="city.buildings" :grid="game.config?.grid || 12" @ready="onReady" @unavailable="flat = true; finish()" />
+        <BattleScene3D v-if="city && !flat" ref="scene" :buildings="city.buildings" :grid="city.grid || game.config?.grid || 16" @ready="onReady" @unavailable="flat = true; finish()" />
         <div v-else class="flat">
-          <CityScene v-if="city" :buildings="city.buildings" :grid="game.config?.grid" compact :ruined="ruinedTypes" :label="`Город ${b.defender}`" />
+          <CityScene v-if="city" :buildings="city.buildings" :grid="city.grid || game.config?.grid || 16" compact :ruined="ruinedTypes" :label="`Город ${b.defender}`" />
           <p v-else class="g-box no-city">Город соперника сейчас недоступен — показан итог боя.</p>
         </div>
 

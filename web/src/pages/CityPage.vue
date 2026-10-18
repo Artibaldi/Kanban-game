@@ -105,10 +105,15 @@ async function place(x: number, y: number) {
     const c = await api.post<City>('/city/buildings', { type: placing.value, x, y })
     city.value = c
     game.setPlayer(c.player)
-    toasts.push({ kind: 'success', title: `${game.building(placing.value)?.name}: стройка началась` }, 2500)
-    placing.value = null
-    // Back to the list the build started from.
-    nextTick(() => document.querySelector<HTMLElement>('.build:not(:disabled)')?.focus())
+    if (isDecor(placing.value)) {
+      // Decor is ready at once, and placing stays on: a road is laid tile after tile.
+      toasts.push({ kind: 'success', title: `${game.building(placing.value)?.name}: готово. Можно ставить дальше или нажать «Отмена».` }, 2000)
+    } else {
+      toasts.push({ kind: 'success', title: `${game.building(placing.value)?.name}: стройка началась` }, 2500)
+      placing.value = null
+      // Back to the list the build started from.
+      nextTick(() => document.querySelector<HTMLElement>('.build:not(:disabled)')?.focus())
+    }
   } catch (e) { toasts.error(e) } finally { busy.value = false }
 }
 async function upgrade(b: CityBuilding) {
@@ -134,8 +139,8 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
           @select="select" @deselect="selectedId = null" @cell="onCell" @unavailable="flat = true" />
         <div v-else-if="city" class="flat">
           <!-- While moving, the flat view only needs some type to light up the free cells. -->
-          <CityScene :buildings="city.buildings" :grid="city.grid || game.config?.grid" :selected-id="selectedId" :placing="moving ? 'wall' : placing" :now="now"
-            :label="`Город: ${city.buildings.length} зданий`" @select="select" @cell="onCell" />
+          <CityScene :buildings="city.buildings" :grid="city.grid || game.config?.grid" :selected-id="selectedId" :placing="moving ? 'wall' : placing" :land="city.land" :now="now"
+            :label="`Город: ${city.buildings.filter(b => !isDecor(b.type)).length} зданий`" @select="select" @cell="onCell" />
         </div>
         <div class="hud">
           <div class="g-box title-box">

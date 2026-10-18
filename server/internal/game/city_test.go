@@ -60,6 +60,11 @@ func TestMoveRules(t *testing.T) {
 	if r := CheckMove(c, th, 3, 3); r != nil {
 		t.Fatalf("even the town hall moves: %v", r)
 	}
+	lvl, until := 2, time.Now()
+	building := Building{ID: "b", Type: "barracks", Level: 1, TargetLevel: &lvl, BusyUntil: &until, X: 4, Y: 4}
+	if r := CheckMove(city(th, building), building, 9, 9); r != nil {
+		t.Fatalf("a building under construction moves too, scaffolding and all: %v", r)
+	}
 	if r := CheckMove(c, tw, 5, 5); r == nil || r.Code != "same_cell" {
 		t.Fatalf("same cell: %v", r)
 	}

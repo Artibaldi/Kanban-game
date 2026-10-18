@@ -95,8 +95,8 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
         <div class="row panel-head"><h2 class="grow">Город</h2><RouterLink to="/city" class="btn sm primary"><Icon name="castle" :size="14" />Открыть</RouterLink></div>
         <ResourceBar v-if="game.player" :player="game.player" class="res" />
         <RouterLink to="/city" class="scene-link" aria-label="Открыть город">
-          <div v-if="city && !flatCity" class="city3d"><CityScene3D :buildings="city.buildings" :grid="game.config?.grid || 12" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flatCity = true" /></div>
-          <CityScene v-else-if="city" :buildings="city.buildings" compact :show-levels="false" :now="Date.now()" label="Ваш город" />
+          <div v-if="city && !flatCity" class="city3d"><CityScene3D :buildings="city.buildings" :grid="city.grid || game.config?.grid || 16" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flatCity = true" /></div>
+          <CityScene v-else-if="city" :buildings="city.buildings" :grid="city.grid || 16" compact :show-levels="false" :now="Date.now()" label="Ваш город" />
         </RouterLink>
         <div class="row wrap chips small">
           <span>Ратуша {{ city?.townhall }}</span><span>Строители {{ game.player?.builders_busy }}/{{ game.player?.builders }}</span>
