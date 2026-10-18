@@ -60,6 +60,9 @@ func (d BuildingDef) Allowed(thLevel int) int {
 	return d.MaxCount[thLevel-1]
 }
 
+// BuildingOrder is the order buildings are offered in the city.
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern"}
+
 var Buildings = map[string]BuildingDef{
 	"townhall": {
 		Type: "townhall", Name: "Ратуша", Description: "Сердце города. Её уровень открывает новые здания и уровни.",
@@ -101,6 +104,15 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 160, Seconds: 8, RequiresTH: 3, HP: 360},
 			{Level: 4, Cost: 320, Seconds: 12, RequiresTH: 4, HP: 540},
 			{Level: 5, Cost: 550, Seconds: 15, RequiresTH: 5, HP: 780},
+		},
+	},
+	"tavern": {
+		Type: "tavern", Name: "Таверна", Description: "Здесь бросают и принимают вызовы на дружеский бой. Уровень добавляет дружеские бои в день.",
+		MaxCount: []int{1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 100, Seconds: 8, RequiresTH: 1, HP: 300},
+			{Level: 2, Cost: 300, Seconds: 15, RequiresTH: 2, HP: 420},
+			{Level: 3, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 560},
 		},
 	},
 	"tower": {

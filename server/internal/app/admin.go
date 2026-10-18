@@ -95,8 +95,19 @@ func (s *Server) adminPatchUser(w http.ResponseWriter, r *http.Request) {
 		if id == a.ID && (role != "admin" || !active) {
 			return 0, nil, refuse(409, "self_lockout", "Нельзя снять собственный доступ администратора.")
 		}
+		var oldTeam *string
+		var wasActive bool
+		if err := tx.QueryRow(ctx, `SELECT team_id::text, active FROM users WHERE id=$1`, id).Scan(&oldTeam, &wasActive); err != nil {
+			return 0, nil, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE users SET role=$2, team_id=$3, active=$4 WHERE id=$1`, id, role, team, active); err != nil {
 			return 0, nil, err
+		}
+		// Leaving the team or being switched off closes the user's challenges: nobody fights a former colleague.
+		if (wasActive && !active) || (oldTeam == nil) != (team == nil) || (oldTeam != nil && team != nil && *oldTeam != *team) {
+			if err := closeChallengesOf(ctx, tx, id); err != nil {
+				return 0, nil, err
+			}
 		}
 		if team != nil {
 			if err := ensurePlayer(ctx, tx, id); err != nil {

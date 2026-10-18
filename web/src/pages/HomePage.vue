@@ -14,7 +14,7 @@ import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
 import { useWork } from '../stores/work'
-import type { City, FeedItem, FortressState, MyProgress, Task } from '../types'
+import type { ArenaState, City, FeedItem, FortressState, MyProgress, Task } from '../types'
 
 const session = useSession()
 const game = useGame()
@@ -27,6 +27,15 @@ const city = ref<City | null>(null)
 const week = ref<MyProgress | null>(null)
 const fort = ref<FortressState | null>(null)
 const flatCity = ref(false)
+const arena = ref<ArenaState | null>(null)
+const call = computed(() => {
+  const a = arena.value
+  if (!a) return null
+  const c = a.incoming.find(x => x.status === 'pending')
+  if (c) return `${c.from_name} вызывает вас на дружеский бой`
+  const r = a.outgoing.find(x => x.status === 'accepted')
+  return r ? `${r.to_name} принял(а) ваш вызов — можно выходить в бой` : null
+})
 
 onMounted(async () => {
   try {
@@ -41,6 +50,7 @@ onMounted(async () => {
     if (session.gameOn) {
       city.value = await api.get<City>('/city'); game.setPlayer(city.value.player); game.loadConfig()
       fort.value = await api.get<FortressState>('/fortress')
+      arena.value = await api.get<ArenaState>('/challenges').catch(() => null)
     }
   } catch (e) { toasts.error(e) }
 })
@@ -69,6 +79,7 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
       </div>
     </div>
     <StatRow :items="statItems" class="home-stats" />
+    <RouterLink v-if="call && session.gameOn" to="/fortress?arena=1" class="call game-only"><span class="g-stroke s2">{{ call }}</span><span class="g-btn yellow small"><span>Ответить</span></span></RouterLink>
 
     <div class="grid">
       <section class="card panel stack main">
@@ -120,6 +131,7 @@ body.work-mode .grid, .grid:not(:has(.city-card)) { grid-template-areas: "main f
 .tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--space-3); }
 .weekline { padding-top: var(--space-3); border-top: 1px solid var(--color-border); }
 .home-stats { margin: 0 0 var(--space-5); }
+.call { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 var(--space-5); padding: 10px 12px 4px 18px; border: 3px solid var(--g-ink); border-radius: 18px; background: linear-gradient(rgba(36, 48, 100, 0.95), rgba(24, 30, 72, 0.95)); text-decoration: none; font-size: 16px; flex-wrap: wrap; }
 .res { flex-wrap: wrap; }
 .fort-line { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
 .scene-link { display: block; max-width: 520px; margin: 0 auto; width: 100%; }

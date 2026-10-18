@@ -18,7 +18,7 @@ func (s *Server) gameConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defs := []game.BuildingDef{}
-	for _, k := range []string{"townhall", "barracks", "storage", "wall", "tower"} {
+	for _, k := range game.BuildingOrder {
 		defs = append(defs, game.Buildings[k])
 	}
 	troops := []game.TroopDef{}

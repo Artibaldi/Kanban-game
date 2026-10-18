@@ -65,6 +65,16 @@ const art = computed(() => {
       extra.push({ kind: 'spears', x: cx + w * 0.5, y: cy - h * 0.2 })
       break
     }
+    case 'tavern': {
+      const w = 19 + L * 1.4, h = 11 + L * 2.5
+      const wood = props.ruined ? stone : [v('wood-light'), v('wood'), v('wood-dark')]
+      shapes.push(...prism(cx, cy, w, h, wood[0], wood[1], wood[2]))
+      if (!props.ruined) shapes.push(...roof(cx, cy, w, h, 10 + L, v('gold'), v('gold-dark')))
+      topY = cy - h - 10 - L
+      extra.push({ kind: 'barrel', x: cx - w - 3, y: cy + 4 })
+      if (L >= 2) extra.push({ kind: 'flag', x: cx, y: topY })
+      break
+    }
     case 'storage': {
       const w = 18 + L * 1.2, h = 9 + L * 2.5
       shapes.push(...prism(cx, cy, w, h, stone[0], stone[1], stone[2]))

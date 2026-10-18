@@ -45,7 +45,7 @@ export interface Player {
   army_capacity: number; army_housing: number; army_queued: number
 }
 
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower'
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern'
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
@@ -112,3 +112,15 @@ export interface MyProgress { weeks: string[]; weekly: number[]; this_week: numb
 export interface TeamProgress { weeks: string[]; team_weekly: number[]; overdue_now: number; waves: WaveSummary[] }
 export interface Duelist { user_id: string; display_name: string; townhall: number; available: boolean; reason: string; defense: Defense }
 export interface TeamSettings { id: string; name: string; work_days: number[]; wave_weeks: number }
+
+export type ChallengeStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'done' | 'open' | 'closed'
+export interface Challenge {
+  id: string; from_id: string; from_name: string; to_id: string | null; to_name: string | null; open: boolean
+  status: ChallengeStatus; created_at: string; expires_at: string; attacked: boolean
+}
+export interface ArenaMember { user_id: string; display_name: string; townhall: number; defense: Defense; accepts_friendly: boolean }
+export interface ArenaState {
+  incoming: Challenge[]; outgoing: Challenge[]; open: Challenge[]; team: ArenaMember[]
+  today: number; per_day: number; friendly_xp: number
+  against_me: { id: string; attacker_id: string; attacker: string; stars: number; destruction: number; created_at: string }[]
+}

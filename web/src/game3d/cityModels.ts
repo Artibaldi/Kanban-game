@@ -135,6 +135,35 @@ function storage(k: Kit, g: THREE.Group, level: number) {
   k.mk(k.rb(0.36, 0.46, 0.08, 0.05), k.M(0x5a3418), 0, 0.45, r + 0.02, g).rotation.y = 0
 }
 
+/** Tavern: a timber inn with a mug on its sign; stone ground floor and tiles at 2, a terrace with lanterns at 3. */
+function tavern(k: Kit, g: THREE.Group, level: number) {
+  const H = k.grp(g)
+  H.rotation.y = -0.35
+  const w = 1.6, d = 1.3, low = 0.62, up = 0.55
+  k.mk(k.rb(w + 0.2, 0.16, d + 0.2, 0.06), k.M(level >= 2 ? STONE_D : 0xa79e8a), 0, 0.1, 0, H)
+  k.mk(k.rb(w, low, d, 0.08), k.M(level >= 2 ? STONE : WOOD), 0, 0.18 + low / 2, 0, H)
+  k.mk(k.rb(w + 0.16, up, d + 0.16, 0.08), k.M(0xf1e2c2), 0, 0.18 + low + up / 2, 0, H)
+  for (const x of [-w / 2 - 0.08, 0, w / 2 + 0.08]) k.mk(k.rb(0.08, up, d + 0.2, 0.02), k.M(WOOD_D), x, 0.18 + low + up / 2, 0, H)
+  k.mk(k.rb(w + 0.2, 0.07, d + 0.2, 0.02), k.M(WOOD_D), 0, 0.18 + low, 0, H)
+  k.mk(gable(k, d + 0.5, 0.8, w + 0.5), k.M(level >= 2 ? TILE : STRAW), 0, 0.18 + low + up + 0.02, 0, H).rotation.y = Math.PI / 2
+  k.mk(k.rb(0.42, 0.55, 0.08, 0.05), k.M(0x5a3418), -0.3, 0.46, d / 2 + 0.02, H)
+  for (const x of [0.3, 0.6]) k.mk(k.rb(0.24, 0.24, 0.08, 0.04), k.M(0xffd36a, { emissive: 0xffa43a, emissiveIntensity: 0.5 }), x, 0.18 + low * 0.6, d / 2 + 0.02, H)
+  for (const x of [-0.45, 0.45]) k.mk(k.rb(0.24, 0.24, 0.08, 0.04), k.M(0xffd36a, { emissive: 0xffa43a, emissiveIntensity: 0.5 }), x, 0.18 + low + up / 2, d / 2 + 0.1, H)
+  // The sign: a golden mug on a bracket.
+  const S = k.grp(H, w / 2 + 0.12, 0.18 + low + 0.05, d / 2 - 0.1)
+  k.mk(k.rb(0.4, 0.04, 0.04, 0.01), k.M(WOOD_D), 0.18, 0.2, 0, S)
+  const board = k.mk(k.rb(0.04, 0.34, 0.34, 0.03), k.M(WOOD), 0.34, 0, 0, S)
+  k.mk(k.cyl(0.07, 0.06, 0.14, 10), k.M(GOLD), 0.03, 0, 0, board)
+  for (const [x, z] of [[-w / 2 - 0.35, d / 2 + 0.1], [-w / 2 - 0.3, d / 2 - 0.3]]) { k.mk(k.cyl(0.14, 0.14, 0.3, 10), k.M(WOOD), x, 0.33, z, H); k.mk(k.cyl(0.15, 0.15, 0.04, 10), k.M(0x4a4a58), x, 0.4, z, H) }
+  if (level >= 3) {
+    k.mk(k.rb(0.9, 0.06, 0.6, 0.02), k.M(WOOD), 0.25, 0.2, d / 2 + 0.5, H)
+    k.mk(k.cyl(0.18, 0.18, 0.04, 10), k.M(WOOD_D), 0.25, 0.42, d / 2 + 0.5, H)
+    k.mk(k.cyl(0.03, 0.03, 0.22, 6), k.M(WOOD_D), 0.25, 0.31, d / 2 + 0.5, H)
+    for (let i = 0; i < 5; i++) k.mk(k.sph(0.05, 6, 4), k.MB([0xff6fa8, 0xffe15a, 0x7fe0b0, 0x6fb0ff, 0xffa43a][i]), -0.6 + i * 0.3, 0.18 + low + 0.05 - Math.sin((i / 4) * Math.PI) * 0.08, d / 2 + 0.25, H)
+    k.flag(H, -w / 2 + 0.1, 0.18 + low + up + 0.3, -d / 2 + 0.1, 0.5, 0.3, 0xffd323, 0xc8463a)
+  }
+}
+
 /** Wall: a block that joins its neighbours — palisade logs, then stone, then capped and gilded stone. */
 function wall(k: Kit, g: THREE.Group, level: number, joins: { e: boolean; s: boolean }) {
   const col = level === 1 ? WOOD : level >= 4 ? 0x8f8676 : STONE, cap = level >= 5 ? GOLD : level >= 4 ? METAL : level >= 2 ? STONE_L : WOOD_D
@@ -187,6 +216,7 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
     case 'storage': storage(k, inner, Math.min(4, L)); inner.scale.setScalar(0.92); break
     case 'wall': wall(k, inner, Math.min(5, L), joins); break
     case 'tower': tower(k, inner, Math.min(5, L)); break
+    case 'tavern': tavern(k, inner, Math.min(3, L)); inner.scale.setScalar(0.85); break
   }
   if (type !== 'wall') k.outline(inner, 0.03)
   k.blob(g, 0, 0, type === 'wall' ? 1.2 : 2.0, type === 'wall' ? 1.2 : 1.7, 0.4)

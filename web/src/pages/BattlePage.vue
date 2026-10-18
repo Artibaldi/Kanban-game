@@ -32,8 +32,8 @@ onMounted(async () => {
   await game.loadConfig()
   try {
     battle.value = await api.get<Battle>(`/battles/${route.params.id}`)
-    const mine = battle.value.attacker_id === session.me?.id
-    city.value = await api.get<City>(mine ? `/duels/${battle.value.defender_id}/city` : '/city').catch(() => null)
+    // The defender's city as it stands now — for both sides of the battle.
+    city.value = await api.get<City>(`/battles/${battle.value.id}/city`).catch(() => null)
     // Without a city or in work mode there is nothing to replay on: show the result.
     if (!city.value || !session.gameOn) { flat.value = !city.value; finish() }
   } catch (e) { toasts.error(e) }
