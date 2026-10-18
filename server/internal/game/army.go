@@ -45,6 +45,9 @@ func CheckResearch(c City, kind string, current int, busy bool, gold int64) (Res
 	if c.finishedLevel("workshop") == 0 {
 		return ResearchSpec{}, refuse("no_workshop", "Сначала постройте мастерскую.")
 	}
+	if rf := CanTrain(c, kind); rf != nil {
+		return ResearchSpec{}, rf
+	}
 	if current < 1 {
 		current = 1
 	}

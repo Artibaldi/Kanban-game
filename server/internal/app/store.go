@@ -119,7 +119,13 @@ func settle(ctx context.Context, tx pgx.Tx, userID string) error {
 	}
 	for _, d := range built {
 		name := game.Buildings[d.kind].Name
-		if err = auditUser(ctx, tx, d.user, "building.completed", "building", d.id, name+": готов уровень "+itoa(d.level)); err != nil {
+		if d.kind == "trap" {
+			// The owner's alone, like every trap event (feedTeam).
+			err = audit(ctx, tx, d.user, "", "building.completed", "building", d.id, name+": готов уровень "+itoa(d.level))
+		} else {
+			err = auditUser(ctx, tx, d.user, "building.completed", "building", d.id, name+": готов уровень "+itoa(d.level))
+		}
+		if err != nil {
 			return err
 		}
 	}

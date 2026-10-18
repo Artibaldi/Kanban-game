@@ -127,12 +127,14 @@ function roundText(r: Battle['rounds'][number]) {
   // In a friendly duel nobody dies: they are out of this battle and come back home.
   const fell = friendly.value ? 'выбыли из боя' : 'погибли'
   const killed = Object.entries(r.killed).filter(([, n]) => n > 0).map(([k, n]) => `${game.troop(k)?.name || k} × ${n}`).join(', ')
-  const parts = [`Башни нанесли ${r.tower_damage} урона${killed ? ` — ${fell}: ${killed}` : ''}.`]
+  // Kills come from towers, mortars and traps together, so they are listed on their own.
+  const parts = [`Башни нанесли ${r.tower_damage} урона.`]
   if (r.mortar_damage) parts.push(`Мортиры: ${r.mortar_damage} урона по площади.`)
   if (r.trap_damage) parts.push(`Ловушки: ${r.trap_damage} урона.`)
   if (r.wall_damage) parts.push(`Урон стенам: ${r.wall_damage}.`)
   if (r.tower_hit) parts.push(`Урон башням: ${r.tower_hit}.`)
   if (r.base_damage) parts.push(`Урон зданиям: ${r.base_damage}.`)
+  if (killed) parts.push(`${fell[0].toUpperCase() + fell.slice(1)}: ${killed}.`)
   return parts.join(' ')
 }
 </script>

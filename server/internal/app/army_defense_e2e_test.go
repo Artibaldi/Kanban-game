@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +29,10 @@ func TestWorkshopArchersAndHiddenTraps(t *testing.T) {
 	res := army["research"].(map[string]any)
 	if res["type"] != "guard" || num(res["target_level"]) != 2 || num(army["max_troop_level"]) != 2 {
 		t.Fatalf("research: %v max %v", res, army["max_troop_level"])
+	}
+	// Test timers are a thousand times faster: keep the research running while we check it blocks the next one.
+	if _, err := pool.Exec(ctx, `UPDATE troop_levels SET busy_until=now()+interval '1 hour' WHERE user_id=(SELECT id FROM users WHERE login='alexey')`); err != nil {
+		t.Fatal(err)
 	}
 	alexey.refused("workshop_busy", "POST", "/army/research", map[string]any{"type": "raider"})
 	if _, err := pool.Exec(ctx, `UPDATE troop_levels SET busy_until=now()-interval '1 second' WHERE user_id=(SELECT id FROM users WHERE login='alexey')`); err != nil {
@@ -64,5 +70,44 @@ func TestWorkshopArchersAndHiddenTraps(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("the owner sees her trap")
+	}
+}
+
+// Building, upgrading, moving and finishing a trap never reaches the team feed: teammates are the only rivals.
+func TestTrapsStayOutOfTheTeamFeed(t *testing.T) {
+	ts, _, _ := testServer(t)
+	alexey, maria := login(t, ts, "alexey"), login(t, ts, "maria")
+	city := alexey.must(201, "POST", "/city/buildings", map[string]any{"type": "trap", "x": 2, "y": 13}, "").Body
+	var id string
+	for _, b := range city["buildings"].([]any) {
+		if m := b.(map[string]any); m["type"] == "trap" {
+			id = m["id"].(string)
+		}
+	}
+	waitFor(t, "the trap is built", func() bool {
+		for _, b := range alexey.must(200, "GET", "/city", nil, "").Body["buildings"].([]any) {
+			if m := b.(map[string]any); m["id"] == id && m["busy_until"] == nil {
+				return true
+			}
+		}
+		return false
+	})
+	alexey.must(200, "POST", "/city/buildings/"+id+"/move", map[string]any{"x": 3, "y": 13}, "")
+	seen := func(c *client) int {
+		n := 0
+		var feed struct{ Items []map[string]any }
+		_ = json.Unmarshal([]byte(c.must(200, "GET", "/events?limit=200", nil, "").Raw), &feed)
+		for _, e := range feed.Items {
+			if strings.Contains(e["summary"].(string), "Ловушка") {
+				n++
+			}
+		}
+		return n
+	}
+	if seen(maria) != 0 {
+		t.Fatal("a teammate learns about the trap from the feed")
+	}
+	if seen(alexey) < 3 {
+		t.Fatalf("the owner sees their own trap events: %d", seen(alexey))
 	}
 }

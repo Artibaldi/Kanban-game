@@ -19,3 +19,7 @@ test('why a troop cannot be raised now', () => {
   assert.match(researchBlock('guard', army({}), 1000, true), /долг/)
   assert.match(researchBlock('guard', army({ levels: { guard: 4 }, max_troop_level: 4 }), 9000, false), /максимальн/)
 })
+
+test('no research for a troop that cannot be trained yet', () => {
+  assert.match(researchBlock('archer', army({ locked: { archer: 'Лучников учат на стрельбище.' } }), 1000, false), /стрельбище/)
+})

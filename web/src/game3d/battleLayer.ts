@@ -21,6 +21,8 @@ export class BattleLayer {
   private shots: { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; arc: number; boom?: boolean }[] = []
   private smokeT = 0
   private puffs: { m: THREE.Mesh; life: number }[] = []
+  /** Trap spikes still on the field; a replay or a skip must not leave them behind. */
+  private spikes: THREE.Group[] = []
   private target: Part | null = null
   /** The city's buildings, read once per round instead of every frame. */
   private entries: ReturnType<CityStage['entries']> | null = null
@@ -87,6 +89,9 @@ export class BattleLayer {
         const dir = f.g.position.clone().sub(best.holder.position).setY(0)
         const stand = best.holder.position.clone().add(dir.setLength(f.type === 'archer' ? 3.2 : best.type === 'wall' ? 0.95 : 1.35)).setY(0.21)
         stand.x += (rand() - 0.5) * 0.5; stand.z += (rand() - 0.5) * 0.5
+        // Archers keep their distance but stay on the island.
+        const edge = this.city.size / 2 + 0.6
+        stand.x = Math.max(-edge, Math.min(edge, stand.x)); stand.z = Math.max(-edge, Math.min(edge, stand.z))
         f.to = stand
       } else f.to = f.g.position.clone()
       f.t = 0
@@ -121,6 +126,7 @@ export class BattleLayer {
       const p = f.g.position.clone(), spikes = k.grp(this.city.group, p.x, 0.05, p.z)
       for (let i = 0; i < 5; i++) k.mk(k.cone(0.07, 0.45, 5), k.M(0xc9d2de), (rand() - 0.5) * 0.6, 0.2, (rand() - 0.5) * 0.6, spikes)
       spikes.scale.y = 0.01
+      this.spikes.push(spikes)
       k.tween(0.18, q => { spikes.scale.y = 0.01 + eOut(q) }, () => {
         k.sparks(this.city.group, p.clone().setY(0.4), 6, 0xffffff, 2)
         k.wait(0.5, () => k.tween(0.3, q => { spikes.scale.y = 1 - q }, () => this.city.group.remove(spikes), 'duel'), 'duel')
@@ -222,6 +228,7 @@ export class BattleLayer {
     for (const f of this.figs) this.city.group.remove(f.g)
     for (const s of this.shots) this.city.group.remove(s.m)
     for (const p of this.puffs) { this.city.group.remove(p.m); this.city.toolkit.release(p.m.material as THREE.Material) }
+    for (const s of this.spikes) this.city.group.remove(s)
     for (const e of this.city.entries()) {
       const r = this.ruins.get(e.id)
       if (!r) continue
@@ -230,6 +237,6 @@ export class BattleLayer {
       e.model.rotation.z = r.rot
       e.model.position.x = 0
     }
-    this.figs = []; this.shots = []; this.puffs = []; this.ruins.clear(); this.target = null
+    this.figs = []; this.shots = []; this.puffs = []; this.spikes = []; this.ruins.clear(); this.target = null
   }
 }

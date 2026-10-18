@@ -191,7 +191,7 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 				continue
 			}
 			wound[k] += incoming * weight(k) / pool
-			dead := int(wound[k]/hp[k] + 1e-9)
+			dead := int(wound[k] / hp[k])
 			if dead > alive[k] {
 				dead = alive[k]
 			}

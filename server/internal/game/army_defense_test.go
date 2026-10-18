@@ -113,6 +113,9 @@ func TestTrainingAndResearchRules(t *testing.T) {
 	if _, r := CheckResearch(ws, "guard", 1, false, 10); r == nil || r.Code != "insufficient_gold" {
 		t.Fatalf("gold: %v", r)
 	}
+	if _, r := CheckResearch(ws, "archer", 1, false, 5000); r == nil || r.Code != "no_archery" {
+		t.Fatalf("no gold on archers that cannot be trained yet: %v", r)
+	}
 	if _, r := CheckResearch(ws, "dragon", 1, false, 5000); r == nil || r.Code != "invalid_troop" {
 		t.Fatalf("unknown troop: %v", r)
 	}

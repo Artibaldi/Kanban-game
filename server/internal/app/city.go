@@ -112,6 +112,15 @@ func cityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 	return map[string]any{"buildings": out, "limits": limits, "townhall": th, "grid": game.MaxGrid, "land": map[string]int{"start": start, "size": size}}, nil
 }
 
+// feedTeam is the team that sees a building's events in the feed. Teammates are the only rivals, so a trap's
+// events are its owner's alone: they still see them as the actor.
+func feedTeam(kind, teamID string) string {
+	if kind == "trap" {
+		return ""
+	}
+	return teamID
+}
+
 // rivalCityDTO is a city as another player sees it before a battle: the traps are hidden.
 func rivalCityDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error) {
 	out, err := cityDTO(ctx, q, userID)
@@ -236,7 +245,7 @@ func (s *Server) placeBuilding(w http.ResponseWriter, r *http.Request) {
 		if game.Buildings[in.Type].Decor {
 			summary = fmt.Sprintf("%s: поставлено (%d золота)", name, spec.Cost)
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.started", "building", id, summary); err != nil {
+		if err = audit(ctx, tx, a.ID, feedTeam(in.Type, a.TeamID), "building.started", "building", id, summary); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
@@ -288,7 +297,7 @@ func (s *Server) upgradeBuilding(w http.ResponseWriter, r *http.Request) {
 		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "upgrade", Gold: -spec.Cost, BuildingID: id, ActorID: a.ID, Note: fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)}); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.upgrade", "building", id, fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)); err != nil {
+		if err = audit(ctx, tx, a.ID, feedTeam(target.Type, a.TeamID), "building.upgrade", "building", id, fmt.Sprintf("%s: улучшение до уровня %d", name, spec.Level)); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
@@ -541,7 +550,7 @@ func (s *Server) moveBuilding(w http.ResponseWriter, r *http.Request) {
 		if _, err = tx.Exec(ctx, `UPDATE buildings SET x=$2, y=$3 WHERE id=$1`, id, in.X, in.Y); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "building.moved", "building", id, fmt.Sprintf("%s: переставлено", game.Buildings[b.Type].Name)); err != nil {
+		if err = audit(ctx, tx, a.ID, feedTeam(b.Type, a.TeamID), "building.moved", "building", id, fmt.Sprintf("%s: переставлено", game.Buildings[b.Type].Name)); err != nil {
 			return 0, nil, err
 		}
 		out, err := cityDTO(ctx, tx, a.ID)
