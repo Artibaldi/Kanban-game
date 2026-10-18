@@ -268,6 +268,30 @@ func TestFortressAPI(t *testing.T) {
 	if !overdue {
 		t.Fatal("PLT-10 is overdue in the seed")
 	}
+	// The panel needs the stage and whether the task is the viewer's own (to offer «Подтвердить»), never whose it is.
+	mine := 0
+	for _, e := range enemies {
+		m := e.(map[string]any)
+		st, _ := m["state"].(string)
+		if st != "ready" && st != "in_progress" && st != "review" {
+			t.Fatalf("enemy state: %v", m)
+		}
+		if v, ok := m["mine"].(bool); !ok {
+			t.Fatalf("mine flag: %v", m)
+		} else if v {
+			mine++
+		}
+	}
+	irina := login(t, ts, "irina").must(200, "GET", "/fortress", nil, "").Body["enemies"].([]any)
+	irinaMine := 0
+	for _, e := range irina {
+		if e.(map[string]any)["mine"] == true {
+			irinaMine++
+		}
+	}
+	if mine == 0 || mine == len(enemies) || irinaMine == mine {
+		t.Fatalf("mine is per viewer: alexey %d of %d, irina %d", mine, len(enemies), irinaMine)
+	}
 	if num(f["wave"].(map[string]any)["planned"]) == 0 || num(f["fog"]) == 0 {
 		t.Fatalf("plan snapshot and fog exist: %v", f["wave"])
 	}

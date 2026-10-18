@@ -99,6 +99,7 @@ export interface WaveNow {
 export interface Enemy {
   task_id: string; number: string; title: string; points: number; priority: Priority; due_date: string | null
   kind: 'goblin' | 'knight' | 'giant' | 'dragon'; row: number; at_gates: boolean; overdue: boolean
+  state: 'ready' | 'in_progress' | 'review'; mine: boolean
 }
 export interface WaveSummary {
   id: string; starts_at?: string; ends_at: string; planned?: number; closed?: number; overdue?: number

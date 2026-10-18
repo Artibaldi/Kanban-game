@@ -22,6 +22,9 @@ type enemyDTO struct {
 	Row      int     `json:"row"`
 	AtGates  bool    `json:"at_gates"`
 	Overdue  bool    `json:"overdue"`
+	State    string  `json:"state"`
+	// Mine: the viewer is the assignee. It lets the panel offer «Подтвердить» to a lead without naming anyone.
+	Mine bool `json:"mine"`
 }
 
 func noTeam() error {
@@ -43,7 +46,7 @@ func (s *Server) fortress(w http.ResponseWriter, r *http.Request) {
 	var out map[string]any
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		var err error
-		out, err = fortressState(ctx, tx, a.TeamID, s.now())
+		out, err = fortressState(ctx, tx, a.TeamID, a.ID, s.now())
 		return err
 	})
 	if err != nil {
@@ -53,7 +56,7 @@ func (s *Server) fortress(w http.ResponseWriter, r *http.Request) {
 	respond(w, 200, out)
 }
 
-func fortressState(ctx context.Context, tx pgx.Tx, teamID string, now time.Time) (map[string]any, error) {
+func fortressState(ctx context.Context, tx pgx.Tx, teamID, viewerID string, now time.Time) (map[string]any, error) {
 	st, err := loadSettings(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -76,15 +79,16 @@ func fortressState(ctx context.Context, tx pgx.Tx, teamID string, now time.Time)
 	}
 	today := now.UTC().Format("2006-01-02")
 	rows, err := tx.Query(ctx, `SELECT t.id::text, t.number, t.title, t.points, t.priority, to_char(t.due_date,'YYYY-MM-DD'),
- COALESCE(t.due_date < $2::date, false), COALESCE(t.due_date >= $2::date AND t.due_date <= $2::date + 2, false)
+ COALESCE(t.due_date < $2::date, false), COALESCE(t.due_date >= $2::date AND t.due_date <= $2::date + 2, false),
+ t.state, COALESCE(t.assignee_id::text = $3, false)
  FROM tasks t JOIN projects p ON p.id=t.project_id WHERE p.team_id=$1 AND `+enemyFilter+`
- ORDER BY t.priority, t.due_date NULLS LAST, t.rank`, teamID, today)
+ ORDER BY t.priority, t.due_date NULLS LAST, t.rank`, teamID, today, viewerID)
 	if err != nil {
 		return nil, err
 	}
 	enemies, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (enemyDTO, error) {
 		var e enemyDTO
-		err := row.Scan(&e.TaskID, &e.Number, &e.Title, &e.Points, &e.Priority, &e.DueDate, &e.Overdue, &e.AtGates)
+		err := row.Scan(&e.TaskID, &e.Number, &e.Title, &e.Points, &e.Priority, &e.DueDate, &e.Overdue, &e.AtGates, &e.State, &e.Mine)
 		e.Kind = game.EnemyKind(e.Points)
 		e.Row = int(e.Priority[1] - '0')
 		return e, err
