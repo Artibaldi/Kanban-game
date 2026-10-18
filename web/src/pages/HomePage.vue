@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import TaskCard from '../components/TaskCard.vue'
 import CityScene from '../components/CityScene.vue'
+import CityScene3D from '../components/CityScene3D.vue'
 import ResourceBar from '../components/ResourceBar.vue'
 import StatRow from '../components/StatRow.vue'
 import { api } from '../api'
@@ -25,6 +26,7 @@ const feed = ref<FeedItem[]>([])
 const city = ref<City | null>(null)
 const week = ref<MyProgress | null>(null)
 const fort = ref<FortressState | null>(null)
+const flatCity = ref(false)
 
 onMounted(async () => {
   try {
@@ -82,7 +84,8 @@ const hello = computed(() => { const h = new Date().getHours(); return h < 12 ? 
         <div class="row panel-head"><h2 class="grow">Город</h2><RouterLink to="/city" class="btn sm primary"><Icon name="castle" :size="14" />Открыть</RouterLink></div>
         <ResourceBar v-if="game.player" :player="game.player" class="res" />
         <RouterLink to="/city" class="scene-link" aria-label="Открыть город">
-          <CityScene v-if="city" :buildings="city.buildings" compact :show-levels="false" :now="Date.now()" label="Ваш город" />
+          <div v-if="city && !flatCity" class="city3d"><CityScene3D :buildings="city.buildings" :grid="game.config?.grid || 12" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flatCity = true" /></div>
+          <CityScene v-else-if="city" :buildings="city.buildings" compact :show-levels="false" :now="Date.now()" label="Ваш город" />
         </RouterLink>
         <div class="row wrap chips small">
           <span>Ратуша {{ city?.townhall }}</span><span>Строители {{ game.player?.builders_busy }}/{{ game.player?.builders }}</span>
@@ -119,7 +122,9 @@ body.work-mode .grid, .grid:not(:has(.city-card)) { grid-template-areas: "main f
 .home-stats { margin: 0 0 var(--space-5); }
 .res { flex-wrap: wrap; }
 .fort-line { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; }
-.scene-link { display: block; max-width: 460px; margin: 0 auto; width: 100%; }
+.scene-link { display: block; max-width: 520px; margin: 0 auto; width: 100%; }
+.city3d { position: relative; height: 280px; border-radius: var(--radius-md); overflow: hidden; border: 3px solid var(--g-ink); }
+.city3d :deep(canvas) { pointer-events: none; }
 .chips span:not(.badge) { background: var(--color-surface); padding: 2px 10px; border-radius: var(--radius-pill); border: 1px solid var(--color-border); }
 .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .events li { display: flex; gap: var(--space-3); }

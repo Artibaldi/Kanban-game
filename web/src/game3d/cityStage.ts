@@ -44,7 +44,11 @@ export class CityStage {
   onLost: () => void = () => {}
   onHoverCell: (c: { x: number; y: number }) => void = () => {}
 
-  constructor(private canvas: HTMLCanvasElement, private labels: HTMLElement, reduced: boolean, private N: number) {
+  /** Per-frame hook for layers drawn on top of the city (the duel replay). */
+  onFrame: (dt: number, t: number) => void = () => {}
+
+  /** `interactive: false` makes a read-only view: no picking, no placing, still pans. */
+  constructor(private canvas: HTMLCanvasElement, private labels: HTMLElement, reduced: boolean, private N: number, private interactive = true) {
     this.kit = new Kit(reduced)
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
@@ -92,6 +96,15 @@ export class CityStage {
     this.resize()
     this.loop()
   }
+
+  /** For layers drawn on the city: the scene group, the kit, the grid size and the placed buildings. */
+  get group() { return this.world }
+  get toolkit() { return this.kit }
+  get size() { return this.N * CELL }
+  get time() { return this.T }
+  entries() { return [...this.placed.values()].map(p => ({ id: p.item.id, type: p.item.type, holder: p.holder, model: p.model, height: p.height })) }
+  /** project: a scene point to canvas pixels (for floating numbers). */
+  project(v: THREE.Vector3): [number, number] { return this.toScreen(this.world.localToWorld(v.clone())) }
 
   /** cellPos: the centre of a grid cell in the scene. */
   cellPos(x: number, y: number) { return new THREE.Vector3((x - (this.N - 1) / 2) * CELL, 0.21, (y - (this.N - 1) / 2) * CELL) }
@@ -253,7 +266,7 @@ export class CityStage {
   private onUp = (ev: PointerEvent) => {
     const d = this.down
     this.down = null
-    if (!d || d.moved) return
+    if (!d || d.moved || !this.interactive) return
     if (this.placing) {
       const c = this.cellAt(ev.clientX, ev.clientY)
       if (c && !this.occupied.has(`${c.x},${c.y}`)) this.onCell(c.x, c.y)
@@ -287,6 +300,7 @@ export class CityStage {
     const dt = Math.min(this.clock.getDelta(), 0.05)
     if (!this.kit.reduced) this.T += dt
     this.kit.update(dt, this.T)
+    this.onFrame(dt, this.T)
     // Chimney smoke and the citadel crystal.
     if (!this.kit.reduced) {
       this.smokeT += dt

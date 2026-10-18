@@ -2,8 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
-import TroopIcon from '../components/TroopIcon.vue'
 import CityScene from '../components/CityScene.vue'
+import CityScene3D from '../components/CityScene3D.vue'
+import Portrait3D from '../components/Portrait3D.vue'
 import GameOff from '../components/GameOff.vue'
 import { api, newIdempotencyKey } from '../api'
 import { ago, dateTime, num } from '../lib/format'
@@ -25,6 +26,7 @@ const selected = ref<Duelist | null>(null)
 const preview = ref<City | null>(null)
 const history = ref<BattleRow[]>([])
 const busy = ref(false)
+const flat = ref(false)
 let attackKey = ''
 
 async function load() {
@@ -50,7 +52,11 @@ async function pick(o: Duelist) {
   selected.value = o
   preview.value = null
   attackKey = newIdempotencyKey()
-  try { preview.value = await api.get<City>(`/duels/${o.user_id}/city`) } catch (e) { toasts.error(e) }
+  try {
+    const c = await api.get<City>(`/duels/${o.user_id}/city`)
+    // A slow answer for a colleague no longer selected must not replace the current one.
+    if (selected.value === o) preview.value = c
+  } catch (e) { if (selected.value === o) toasts.error(e) }
 }
 const housing = computed(() => Object.entries(squad.value).reduce((n, [k, v]) => n + (game.troop(k)?.housing || 1) * (v || 0), 0))
 const total = computed(() => Object.values(squad.value).reduce((n, v) => n + (v || 0), 0))
@@ -60,6 +66,7 @@ const blocker = computed(() => {
   if (total.value === 0) return 'Выберите войска.'
   return ''
 })
+function step(type: string, d: number) { squad.value[type] = Math.min(troops.value[type] || 0, Math.max(0, (squad.value[type] || 0) + d)) }
 async function attack() {
   if (!selected.value) return
   busy.value = true
@@ -74,69 +81,80 @@ async function attack() {
 
 <template>
   <GameOff v-if="!session.gameOn" />
-  <div v-else class="page">
+  <div v-else class="page duels-page">
     <div class="page-head">
       <div>
         <p class="eyebrow"><RouterLink to="/fortress">Крепость</RouterLink> · своя команда</p>
-        <h1>Дружеские бои</h1>
-        <p class="muted">Дружеский бой ничего не стоит: войска не гибнут, трофеи не меняются. Награда — {{ list?.friendly_xp ?? 5 }} опыта.</p>
+        <h1>Дружеские<span class="sub">бои</span></h1>
+        <p class="muted">Бой ничего не стоит: войска не гибнут, трофеи не меняются. Награда — {{ list?.friendly_xp ?? 5 }} опыта.</p>
       </div>
-      <span v-if="list" class="badge">Сегодня: {{ list.today }} из {{ list.per_day }}</span>
+      <span v-if="list" class="g-box today g-stroke s2">Сегодня: {{ list.today }} из {{ list.per_day }}</span>
     </div>
+
     <div class="layout">
-      <section class="stack">
-        <h2 class="sr-only">Коллеги</h2>
-        <p v-if="list && !list.items.length" class="card panel muted">Пока никто из команды не принимает дружеские бои. Включить их можно в настройках.</p>
-        <button v-for="o in list?.items || []" :key="o.user_id" class="opp card" :class="{ on: selected?.user_id === o.user_id, off: !o.available }" :aria-pressed="selected?.user_id === o.user_id" @click="pick(o)">
-          <span class="th" :title="`Ратуша ${o.townhall}`">{{ o.townhall }}</span>
+      <section class="opps" aria-label="Коллеги">
+        <div v-if="list && !list.items.length" class="g-panel empty">
+          <span class="g-ribbon"><b>Пока никого</b></span>
+          <p>Никто из команды не принимает дружеские бои. Включить их можно в настройках — себе и коллегам по желанию.</p>
+          <RouterLink to="/settings" class="g-btn blue wide"><span>Открыть настройки</span></RouterLink>
+        </div>
+        <button v-for="o in list?.items || []" :key="o.user_id" class="opp" :class="{ on: selected?.user_id === o.user_id, off: !o.available }" :aria-pressed="selected?.user_id === o.user_id" @click="pick(o)">
+          <span class="th g-stroke s2" :title="`Ратуша ${o.townhall}`">{{ o.townhall }}</span>
           <span class="grow">
             <strong>{{ o.display_name }}</strong>
-            <span class="xs muted">башни {{ o.defense.towers }}, стены {{ o.defense.walls }}</span>
-            <span v-if="!o.available" class="xs reason">{{ o.reason }}</span>
+            <span class="meta">башни {{ o.defense.towers }} · стены {{ o.defense.walls }}</span>
+            <span v-if="!o.available" class="reason">{{ o.reason }}</span>
           </span>
         </button>
-        <p class="xs muted">В списке коллеги из вашей команды, которые принимают дружеские бои.</p>
       </section>
 
-      <section v-if="selected" class="card panel stack target">
-        <div class="row wrap"><h2 class="grow">{{ selected.display_name }}</h2><span class="badge">Ратуша {{ selected.townhall }}</span></div>
+      <section v-if="selected" class="g-panel target">
+        <span class="g-ribbon"><b>{{ selected.display_name }}</b></span>
         <div class="preview">
-          <CityScene v-if="preview" :buildings="preview.buildings" :grid="game.config?.grid" compact :show-levels="true" :label="`Город коллеги ${selected.display_name}`" />
-          <p v-else class="muted small">Загрузка города…</p>
+          <CityScene3D v-if="preview && !flat" :buildings="preview.buildings" :grid="game.config?.grid || 12" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flat = true" />
+          <CityScene v-else-if="preview" :buildings="preview.buildings" :grid="game.config?.grid" compact :show-levels="true" :label="`Город коллеги ${selected.display_name}`" />
+          <p v-else class="loading">Загрузка города…</p>
+          <span class="th-chip g-stroke s2">Ратуша {{ selected.townhall }}</span>
         </div>
-        <dl class="defense small">
-          <div><dt>Стены</dt><dd>{{ num(selected.defense.wall_hp) }}</dd></div>
-          <div><dt>Башни</dt><dd>{{ num(selected.defense.tower_hp) }}</dd></div>
-          <div><dt>Урон башен</dt><dd>{{ selected.defense.tower_dps }}/залп</dd></div>
-          <div><dt>Ратуша</dt><dd>{{ num(selected.defense.townhall_hp) }}</dd></div>
-        </dl>
+        <div class="defense">
+          <span class="g-chip">Стены {{ num(selected.defense.wall_hp) }}</span>
+          <span class="g-chip">Башни {{ num(selected.defense.tower_hp) }}</span>
+          <span class="g-chip">Урон башен {{ selected.defense.tower_dps }}/залп</span>
+          <span class="g-chip">Ратуша {{ num(selected.defense.townhall_hp) }}</span>
+        </div>
 
         <h3>Отряд</h3>
-        <div v-for="t in game.config?.troops || []" :key="t.type" class="squad-row">
-          <TroopIcon :type="t.type" :size="40" :faded="!troops[t.type]" />
-          <label class="grow small" :for="`sq-${t.type}`"><strong>{{ t.name }}</strong><span class="muted"> · готово {{ troops[t.type] || 0 }}</span></label>
-          <input :id="`sq-${t.type}`" v-model.number="squad[t.type]" type="range" min="0" :max="troops[t.type] || 0" :disabled="!troops[t.type]" />
-          <span class="num val">{{ squad[t.type] || 0 }}</span>
+        <div class="squad">
+          <div v-for="t in game.config?.troops || []" :key="t.type" class="unit" :class="{ none: !troops[t.type] }">
+            <Portrait3D :troop="t.type" :size="72" :faded="!troops[t.type]" />
+            <strong>{{ t.name }}</strong>
+            <span class="have">готово {{ troops[t.type] || 0 }}</span>
+            <div class="stepper" role="group" :aria-label="`${t.name} в отряде`">
+              <button class="g-btn blue small" aria-label="Меньше" :disabled="!(squad[t.type] > 0)" @click="step(t.type, -1)"><span>−</span></button>
+              <span class="val g-stroke s2" aria-live="polite">{{ squad[t.type] || 0 }}</span>
+              <button class="g-btn blue small" aria-label="Больше" :disabled="(squad[t.type] || 0) >= (troops[t.type] || 0)" @click="step(t.type, 1)"><span>+</span></button>
+            </div>
+          </div>
         </div>
-        <p class="small muted">В отряде {{ total }} бойцов ({{ housing }} мест). Бой бесплатный, все бойцы вернутся.</p>
-        <button class="btn primary big" :disabled="!!blocker || busy" :aria-busy="busy" @click="attack"><Icon name="swords" />Дружеский бой</button>
-        <p v-if="blocker" class="small reason">{{ blocker }}</p>
+        <p class="sum">В отряде {{ total }} бойцов ({{ housing }} мест). Бой бесплатный, все вернутся домой.</p>
+        <button class="g-btn yellow big wide" :disabled="!!blocker || busy" :aria-busy="busy" @click="attack"><span>В бой!</span></button>
+        <p v-if="blocker" class="reason center">{{ blocker }}</p>
       </section>
     </div>
 
-    <section class="card panel stack" style="margin-top: 20px">
+    <section class="card panel stack history">
       <h2>Последние бои</h2>
       <p v-if="!history.length" class="muted small">Боёв ещё не было.</p>
       <div class="table-scroll" v-else>
         <table class="table">
           <thead><tr><th>Бой</th><th>Разрушения</th><th>Звёзды</th><th>Когда</th><th /></tr></thead>
           <tbody>
-            <tr v-for="b in history" :key="b.id">
-              <td>{{ b.kind === 'raid' ? 'Набег (архив)' : 'Дружеский' }} · {{ b.role === 'attack' ? b.defender : b.attacker }}</td>
-              <td class="num">{{ b.destruction }}%</td>
-              <td>{{ b.stars }}</td>
-              <td :title="dateTime(b.created_at)">{{ ago(b.created_at) }}</td>
-              <td><RouterLink :to="`/battles/${b.id}`">Журнал</RouterLink></td>
+            <tr v-for="h in history" :key="h.id">
+              <td>{{ h.kind === 'raid' ? 'Набег (архив)' : 'Дружеский' }} · {{ h.role === 'attack' ? h.defender : h.attacker }}</td>
+              <td class="num">{{ h.destruction }}%</td>
+              <td><span class="stars" :aria-label="`${h.stars} из 3`"><Icon v-for="i in 3" :key="i" name="star" :size="14" :class="{ lit: i <= h.stars }" /></span></td>
+              <td :title="dateTime(h.created_at)">{{ ago(h.created_at) }}</td>
+              <td><RouterLink :to="`/battles/${h.id}`">Смотреть</RouterLink></td>
             </tr>
           </tbody>
         </table>
@@ -146,22 +164,40 @@ async function attack() {
 </template>
 
 <style scoped>
-.layout { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: var(--space-5); align-items: start; }
-.opp { display: flex; align-items: center; gap: var(--space-3); width: 100%; text-align: left; padding: var(--space-3); cursor: pointer; border-width: 1px; }
-.opp:hover { border-color: var(--color-action-primary); }
-.opp.on { border-color: var(--color-action-primary); background: var(--color-selected); }
-.opp.off { opacity: 0.8; }
+.duels-page { max-width: none; }
+.today { padding: 8px 14px; font-size: 15px; }
+.layout { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: var(--space-6); align-items: start; padding-top: 26px; }
+.opps { display: flex; flex-direction: column; gap: 10px; }
+.opp { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border: 3px solid var(--g-ink); border-radius: 16px; background: var(--g-panel); color: #3a2410; cursor: pointer; box-shadow: inset 0 0 0 2px #fff6dd, 0 4px 0 #3e2914, 0 4px 0 2px var(--g-ink); transition: transform 0.15s; }
+.opp:hover { transform: translateY(-2px); }
+.opp.on { background: linear-gradient(#ffec8a, #ffd323); }
+.opp.off { filter: grayscale(0.5); opacity: 0.85; }
 .opp .grow { display: flex; flex-direction: column; }
-.th { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-sm); background: var(--art-roof-hall); color: #fff; font-weight: 800; flex: none; }
-.reason { color: var(--color-warning); }
-.preview { background: linear-gradient(180deg, var(--art-sky), transparent); border-radius: var(--radius-md); padding: var(--space-2); }
-.defense { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-2); margin: 0; }
-.defense div { background: var(--color-surface-2); padding: var(--space-2); border-radius: var(--radius-sm); }
-.defense dt { color: var(--color-text-muted); font-size: var(--text-xs); }
-.defense dd { margin: 0; font-weight: 750; }
-.squad-row { display: flex; align-items: center; gap: var(--space-3); }
-.squad-row input[type="range"] { width: 40%; accent-color: var(--color-action-primary); }
-.val { width: 28px; text-align: right; font-weight: 800; }
-.big { min-height: 48px; font-size: var(--text-md); }
-@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .defense { grid-template-columns: 1fr 1fr; } }
+.opp strong { font: 800 16px var(--font-game); }
+.meta { font: 600 12px var(--font-sans); color: #7a5530; }
+.th { display: grid; place-items: center; width: 44px; height: 44px; border: 2px solid var(--g-ink); border-radius: 12px; background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); font-size: 20px; flex: none; }
+.empty p { font: 600 14px var(--font-sans); color: #5a3a1e; text-align: center; margin: 4px 0 12px; }
+.target { padding-top: 44px; display: flex; flex-direction: column; gap: 12px; }
+.preview { position: relative; height: 320px; border: 3px solid var(--g-ink); border-radius: 16px; overflow: hidden; background: linear-gradient(#69bdf0, #b9e4fa 70%, #e3f4fb); display: grid; place-items: center; }
+.loading { font: 700 14px var(--font-sans); color: #2b3566; }
+.th-chip { position: absolute; top: 8px; left: 8px; z-index: 3; padding: 4px 10px; border: 2px solid var(--g-ink); border-radius: 10px; background: rgba(24, 30, 72, 0.85); font-size: 14px; }
+.defense { display: flex; flex-wrap: wrap; gap: 8px; }
+.target h3 { font: 900 18px var(--font-game); color: #3a2410; }
+.squad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.unit { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px; border: 2px solid var(--g-panel-b); border-radius: 14px; background: #fff8e6; color: #3a2410; }
+.unit strong { font: 800 15px var(--font-game); }
+.unit.none { opacity: 0.7; }
+.have { font: 600 12px var(--font-sans); color: #7a5530; }
+.stepper { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.stepper .g-btn { width: 36px; padding: 4px 0; margin-bottom: 6px; }
+.val { min-width: 30px; text-align: center; font-size: 20px; }
+.sum { font: 600 13px var(--font-sans); color: #5a3a1e; text-align: center; }
+.wide { width: 100%; }
+.reason { font: 700 12px var(--font-sans); color: #9b1f1f; }
+.center { text-align: center; }
+.history { margin-top: var(--space-8); }
+.stars { display: inline-flex; gap: 2px; color: var(--color-border-strong); }
+.stars .lit { color: #e3a800; fill: #ffd323; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .preview { height: 260px; } }
+@media (max-width: 520px) { .squad { grid-template-columns: 1fr; } }
 </style>

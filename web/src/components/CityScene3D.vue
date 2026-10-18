@@ -6,7 +6,7 @@ import { duration } from '../lib/format'
 import type { BuildingType, CityBuilding } from '../types'
 import type { CityStage } from '../game3d/cityStage'
 
-const props = defineProps<{ buildings: CityBuilding[]; grid: number; selectedId: string | null; placing: BuildingType | null; now: number }>()
+const props = defineProps<{ buildings: CityBuilding[]; grid: number; selectedId: string | null; placing: BuildingType | null; now: number; readonly?: boolean }>()
 const emit = defineEmits<{ select: [b: CityBuilding]; deselect: []; cell: [x: number, y: number]; unavailable: [] }>()
 const canvas = ref<HTMLCanvasElement>()
 const labels = ref<HTMLElement>()
@@ -28,7 +28,7 @@ onMounted(async () => {
     const ok = (await import('../game3d/fortressStage')).webglAvailable()
     if (unmounted) return
     if (!ok || !canvas.value || !labels.value) throw new Error('no webgl')
-    const s = new mod.CityStage(canvas.value, labels.value, matchMedia('(prefers-reduced-motion: reduce)').matches, props.grid)
+    const s = new mod.CityStage(canvas.value, labels.value, matchMedia('(prefers-reduced-motion: reduce)').matches, props.grid, !props.readonly)
     s.onPick = id => { const b = props.buildings.find(x => x.id === id); if (b) emit('select', b); else emit('deselect') }
     s.onCell = (x, y) => emit('cell', x, y)
     s.onLost = () => emit('unavailable')
