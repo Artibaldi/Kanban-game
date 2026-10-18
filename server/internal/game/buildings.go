@@ -30,6 +30,8 @@ type LevelSpec struct {
 	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage, crystal well
 	FeePct        int   `json:"fee_pct,omitempty"`    // market: the share kept on every exchange
 	Builders      int   `json:"builders,omitempty"`   // builder hut
+	Splash        int   `json:"splash,omitempty"`     // mortar: damage per unit hit by a shell
+	TrapDmg       int   `json:"trap_dmg,omitempty"`   // trap: damage when it springs
 }
 
 type BuildingDef struct {
@@ -66,7 +68,7 @@ func (d BuildingDef) Allowed(thLevel int) int {
 }
 
 // BuildingOrder is the order buildings are offered in the city.
-var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "road", "tree", "flowers", "lantern", "pond"}
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "archery", "workshop", "mortar", "trap", "road", "tree", "flowers", "lantern", "pond"}
 
 // Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
 // 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
@@ -162,6 +164,42 @@ var Buildings = map[string]BuildingDef{
 			{Level: 1, Cost: 200, Seconds: 12, RequiresTH: 2, HP: 300, EnergyCap: 250},
 			{Level: 2, Cost: 500, Seconds: 25, RequiresTH: 3, HP: 420, EnergyCap: 500},
 			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 560, EnergyCap: 900},
+		},
+	},
+	// Army and defence.
+	"archery": {
+		Type: "archery", Name: "Стрельбище", Description: "Здесь учат лучников: они стреляют через стены, но хрупки.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 250, Seconds: 15, RequiresTH: 2, HP: 380},
+			{Level: 2, Cost: 600, Seconds: 25, RequiresTH: 3, HP: 520},
+			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 680},
+		},
+	},
+	"workshop": {
+		Type: "workshop", Name: "Мастерская", Description: "Улучшает войска: каждый уровень отряда даёт +10% здоровья и атаки. Уровень мастерской открывает следующий уровень войск.",
+		MaxCount: []int{0, 0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 800, Seconds: 30, RequiresTH: 3, HP: 500},
+			{Level: 2, Cost: 1500, Seconds: 45, RequiresTH: 4, HP: 650},
+			{Level: 3, Cost: 2500, Seconds: 60, RequiresTH: 5, HP: 800},
+		},
+	},
+	"mortar": {
+		Type: "mortar", Name: "Мортира", Description: "Бьёт по площади: каждый снаряд задевает до шести бойцов. Сильна против толпы.", Defense: true,
+		MaxCount: []int{0, 0, 1, 1, 2},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 700, Seconds: 30, RequiresTH: 3, HP: 450, Splash: 6},
+			{Level: 2, Cost: 1200, Seconds: 45, RequiresTH: 4, HP: 600, Splash: 9},
+			{Level: 3, Cost: 2000, Seconds: 60, RequiresTH: 5, HP: 780, Splash: 13},
+		},
+	},
+	"trap": {
+		Type: "trap", Name: "Ловушка", Description: "Срабатывает один раз в начале боя. Соперник не видит ловушки, пока не нападёт.", Defense: true,
+		MaxCount: []int{0, 2, 3, 4, 5},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 60, Seconds: 5, RequiresTH: 2, HP: 0, TrapDmg: 60},
+			{Level: 2, Cost: 200, Seconds: 10, RequiresTH: 3, HP: 0, TrapDmg: 110},
 		},
 	},
 	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.

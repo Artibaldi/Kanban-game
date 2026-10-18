@@ -307,7 +307,7 @@ func (s *Server) fightFriendly(ctx context.Context, tx pgx.Tx, a actor, defender
 	}
 	defense := game.DefenseOf(defCity)
 	seed := rand.Int64N(1 << 53) // fits a JavaScript number exactly
-	outcome := game.Fight(army, defense, seed, st.RandomSpread)
+	outcome := game.Fight(army, nil, defense, seed, st.RandomSpread)
 	armyJSON, _ := json.Marshal(army)
 	lossJSON, _ := json.Marshal(outcome.Losses)
 	defJSON, _ := json.Marshal(defense)
