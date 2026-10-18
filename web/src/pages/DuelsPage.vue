@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import CityScene from '../components/CityScene.vue'
 import CityScene3D from '../components/CityScene3D.vue'
@@ -19,6 +19,9 @@ const game = useGame()
 const session = useSession()
 const toasts = useToasts()
 const router = useRouter()
+const route = useRoute()
+/** Answering a challenge: the opponent and the city come from it, the attack goes through it. */
+const challengeId = ref(typeof route.query.challenge === 'string' ? route.query.challenge : '')
 const list = ref<DuelList | null>(null)
 const troops = ref<Record<string, number>>({})
 const squad = ref<Record<string, number>>({})
@@ -40,15 +43,27 @@ async function load() {
     troops.value = a.troops
     squad.value = Object.fromEntries(Object.entries(a.troops).map(([k, v]) => [k, v]))
     history.value = b.items
-    if (!selected.value) {
-      const first = o.items.find(x => x.available)
+    if (challengeId.value) await pickChallenge(o)
+    else if (!selected.value) {
+      const wanted = typeof route.query.opponent === 'string' ? o.items.find(x => x.user_id === route.query.opponent) : null
+      const first = wanted || o.items.find(x => x.available)
       if (first) pick(first)
     }
   } catch (e) { toasts.error(e) }
 }
 onMounted(async () => { await game.loadConfig(); load() })
 
+async function pickChallenge(o: DuelList) {
+  try {
+    const c = await api.get<City & { opponent_id: string; opponent_name: string; defense: Duelist['defense'] }>(`/challenges/${challengeId.value}/city`)
+    attackKey = newIdempotencyKey()
+    const left = o.per_day - o.today
+    selected.value = { user_id: c.opponent_id, display_name: c.opponent_name, townhall: c.townhall, available: left > 0, reason: left > 0 ? '' : 'Лимит дружеских боёв на сегодня исчерпан', defense: c.defense }
+    preview.value = c
+  } catch (e) { toasts.error(e); challengeId.value = '' }
+}
 async function pick(o: Duelist) {
+  challengeId.value = ''
   selected.value = o
   preview.value = null
   attackKey = newIdempotencyKey()
@@ -72,7 +87,9 @@ async function attack() {
   busy.value = true
   try {
     // One key per prepared duel: a double click or a retried request cannot start two battles.
-    const b = await api.post<Battle>('/battles/friendly', { defender_id: selected.value.user_id, army: squad.value }, attackKey)
+    const b = challengeId.value
+      ? await api.post<Battle>(`/challenges/${challengeId.value}/attack`, { army: squad.value }, attackKey)
+      : await api.post<Battle>('/battles/friendly', { defender_id: selected.value.user_id, army: squad.value }, attackKey)
     game.refresh()
     router.push(`/battles/${b.id}`)
   } catch (e) { toasts.error(e); attackKey = newIdempotencyKey() } finally { busy.value = false }
@@ -93,10 +110,15 @@ async function attack() {
 
     <div class="layout">
       <section class="opps" aria-label="Коллеги">
-        <div v-if="list && !list.items.length" class="g-panel empty">
-          <span class="g-ribbon"><b>Пока никого</b></span>
-          <p>Никто из команды не принимает дружеские бои. Включить их можно в настройках — себе и коллегам по желанию.</p>
-          <RouterLink to="/settings" class="g-btn blue wide"><span>Открыть настройки</span></RouterLink>
+        <div v-if="challengeId" class="g-panel empty">
+          <span class="g-ribbon gold"><b>Бой по вызову</b></span>
+          <p>Соперник согласился на бой. Выберите отряд справа — после боя он увидит повтор и сможет ответить вызовом.</p>
+          <RouterLink to="/fortress?arena=1" class="g-btn blue wide"><span>Назад в арену</span></RouterLink>
+        </div>
+        <div v-if="list && !list.items.length && !challengeId" class="g-panel empty">
+          <span class="g-ribbon"><b>Бой — по вызову</b></span>
+          <p>Без вызова сейчас никто не принимает бои. Вызовите коллегу или бросьте открытый вызов команде — это в крепости, в «Арене».</p>
+          <RouterLink to="/fortress?arena=1" class="g-btn yellow wide"><span>Открыть арену</span></RouterLink>
         </div>
         <button v-for="o in list?.items || []" :key="o.user_id" class="opp" :class="{ on: selected?.user_id === o.user_id, off: !o.available }" :aria-pressed="selected?.user_id === o.user_id" @click="pick(o)">
           <span class="th g-stroke s2" :title="`Ратуша ${o.townhall}`">{{ o.townhall }}</span>
@@ -109,7 +131,7 @@ async function attack() {
       </section>
 
       <section v-if="selected" class="g-panel target">
-        <span class="g-ribbon"><b>{{ selected.display_name }}</b></span>
+        <span class="g-ribbon" :class="{ gold: challengeId }"><b>{{ challengeId ? 'Вызов: ' : '' }}{{ selected.display_name }}</b></span>
         <div class="preview">
           <CityScene3D v-if="preview && !flat" :buildings="preview.buildings" :grid="game.config?.grid || 12" :selected-id="null" :placing="null" :now="Date.now()" readonly @unavailable="flat = true" />
           <CityScene v-else-if="preview" :buildings="preview.buildings" :grid="game.config?.grid" compact :show-levels="true" :label="`Город коллеги ${selected.display_name}`" />

@@ -8,7 +8,7 @@ import { eIn, eOut, rand } from './kit'
 import type { CityStage } from './cityStage'
 import { animateTroop, troopModel } from './troops'
 
-const partOf: Record<BuildingType, Part> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other' }
+const partOf: Record<BuildingType, Part> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other' }
 
 interface Fig { type: string; g: THREE.Group; ph: number; alive: boolean; target: string | null; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number }
 interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; sy: number }

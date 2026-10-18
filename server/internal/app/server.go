@@ -86,6 +86,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/duels", s.duels)
 		r.Get("/duels/{id}/city", s.duelCity)
 		r.Post("/battles/friendly", s.friendlyBattle)
+		r.Get("/battles/{id}/city", s.battleCity)
 		r.Get("/challenges", s.listChallenges)
 		r.Post("/challenges", s.createChallenge)
 		r.Post("/challenges/{id}/accept", s.answerChallenge("accept"))

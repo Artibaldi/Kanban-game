@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -328,4 +329,35 @@ func (s *Server) fightFriendly(ctx context.Context, tx pgx.Tx, a actor, defender
 		return "", err
 	}
 	return battleID, nil
+}
+
+// battleCity: the defender's city for a battle's replay — for the two who fought, never anyone else.
+// It is today's layout, so a duel replays on the city as it stands now.
+func (s *Server) battleCity(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	id, err := idParam(r)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	ctx := r.Context()
+	var att, def string
+	err = s.db.QueryRow(ctx, `SELECT attacker_id::text, defender_id::text FROM battles WHERE id=$1`, id).Scan(&att, &def)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !a.admin() && a.ID != att && a.ID != def) {
+		failErr(w, refuse(404, "not_found", "Бой не найден."))
+		return
+	}
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	c, err := cityDTO(ctx, s.db, def)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	respond(w, 200, c)
 }

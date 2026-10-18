@@ -154,18 +154,18 @@ func (s *Server) listChallenges(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	rows, err := s.db.Query(ctx, `SELECT b.id::text, u.display_name, b.stars, b.destruction, b.created_at FROM battles b JOIN users u ON u.id=b.attacker_id
+	rows, err := s.db.Query(ctx, `SELECT b.id::text, u.id::text, u.display_name, b.stars, b.destruction, b.created_at FROM battles b JOIN users u ON u.id=b.attacker_id
  WHERE b.defender_id::text=$1 AND b.kind='friendly' AND b.created_at > $2 ORDER BY b.created_at DESC LIMIT 10`, a.ID, now.Add(-24*time.Hour))
 	if err != nil {
 		failErr(w, err)
 		return
 	}
 	against, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (map[string]any, error) {
-		var id, name string
+		var id, uid, name string
 		var stars, dest int
 		var at time.Time
-		err := row.Scan(&id, &name, &stars, &dest, &at)
-		return map[string]any{"id": id, "attacker": name, "stars": stars, "destruction": dest, "created_at": at}, err
+		err := row.Scan(&id, &uid, &name, &stars, &dest, &at)
+		return map[string]any{"id": id, "attacker_id": uid, "attacker": name, "stars": stars, "destruction": dest, "created_at": at}, err
 	})
 	if err != nil {
 		failErr(w, err)
@@ -348,6 +348,12 @@ func (s *Server) challengeCity(w http.ResponseWriter, r *http.Request) {
 		if out, err = cityDTO(r.Context(), tx, def); err != nil {
 			return err
 		}
+		c2, err := loadCity(r.Context(), tx, def)
+		if err != nil {
+			return err
+		}
+		out["defense"] = game.DefenseOf(c2)
+		out["opponent_id"] = def
 		out["challenge"] = c
 		out["opponent_name"] = name
 		return nil

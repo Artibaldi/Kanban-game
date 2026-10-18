@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import GameOff from '../components/GameOff.vue'
 import GameCrown from '../components/GameCrown.vue'
 import FortressScene from '../components/FortressScene.vue'
 import FortressScene3D from '../components/FortressScene3D.vue'
 import WaveChest from '../components/WaveChest.vue'
+import ArenaPanel from '../components/ArenaPanel.vue'
 import { api, type ApiError } from '../api'
 import { crownsText, daysLeftText, enemyName, enemyRows, waveProgress } from '../lib/fortress'
+import { arenaBadge } from '../lib/arena'
 import { date, dateTime, plural } from '../lib/format'
 import { moveTask } from '../lib/taskActions'
 import { floatText, gameCoins } from '../ui/gameFx'
@@ -16,12 +18,13 @@ import { reduced } from '../ui/motion'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
-import type { Enemy, FortressState, Task, TaskDetail, WaveSummary } from '../types'
+import type { ArenaState, Enemy, FortressState, Task, TaskDetail, WaveSummary } from '../types'
 
 const session = useSession()
 const game = useGame()
 const toasts = useToasts()
 const router = useRouter()
+const route = useRoute()
 const state = ref<FortressState | null>(null)
 const waves = ref<WaveSummary[]>([])
 const noTeam = ref(false)
@@ -32,16 +35,20 @@ const scene = ref<InstanceType<typeof FortressScene3D>>()
 const waveBar = ref<HTMLElement>()
 const glint = ref(false)
 const chestOpen = ref(false)
+const arena = ref<ArenaState | null>(null)
+const arenaOpen = ref(route.query.arena === '1')
+const badge = computed(() => arenaBadge(arena.value))
 
 // Only the newest response counts: a slow periodic refresh must not bring back an enemy that just fell.
 let loadSeq = 0
 async function load() {
   const seq = ++loadSeq
   try {
-    const [f, w] = await Promise.all([api.get<FortressState>('/fortress'), api.get<{ items: WaveSummary[] }>('/waves')])
+    const [f, w, c] = await Promise.all([api.get<FortressState>('/fortress'), api.get<{ items: WaveSummary[] }>('/waves'), api.get<ArenaState>('/challenges').catch(() => null)])
     if (seq !== loadSeq) return
     state.value = f
     waves.value = w.items
+    arena.value = c
     if (selectedId.value && !f.enemies.some(e => e.task_id === selectedId.value)) selectedId.value = null
   } catch (e) {
     if ((e as ApiError).code === 'not_a_player') noTeam.value = true
@@ -120,6 +127,11 @@ function showResult(b: NonNullable<typeof battle.value>) {
 }
 function speed() { const b = battle.value; if (!b) return; b.speed = b.speed === 1 ? 2 : 1; scene.value?.setSpeed(b.speed) }
 function skip() { scene.value?.finishWave() }
+function closeArena() {
+  arenaOpen.value = false
+  if (route.query.arena) router.replace({ query: { ...route.query, arena: undefined } })
+  nextTick(() => document.querySelector<HTMLElement>('.arena-btn')?.focus())
+}
 function closeBattle() { scene.value?.endWave(); battle.value = null }
 function closeChest() {
   chestOpen.value = false
@@ -136,7 +148,7 @@ function select(id: string | null) {
 function closePanel() { selectedId.value = null; opener?.focus?.(); opener = null }
 function onKey(e: KeyboardEvent) {
   if (e.key !== 'Escape') return
-  if (chestOpen.value) return
+  if (chestOpen.value || arenaOpen.value) return
   if (battle.value?.done) closeBattle()
   else if (selectedId.value) closePanel()
 }
@@ -194,7 +206,9 @@ const resultTitle = computed(() => {
 
           <div class="actions">
             <button v-if="lastWave && !battle" class="g-btn yellow small" :class="{ pulse: unseen }" @click="startBattle(lastWave)"><span>{{ unseen ? 'Итог волны!' : 'Бой волны' }}</span></button>
-            <RouterLink v-if="!battle" to="/fortress/duels" class="g-btn blue small"><span>Дружеские бои</span></RouterLink>
+            <button v-if="!battle" class="g-btn yellow small arena-btn" :class="{ pulse: badge > 0 }" @click="arenaOpen = true">
+              <span>Вызвать на бой</span><i v-if="badge" class="cnt" :aria-label="`ждут вас: ${badge}`">{{ badge }}</i>
+            </button>
           </div>
         </div>
 
@@ -256,6 +270,7 @@ const resultTitle = computed(() => {
         </div>
       </section>
 
+      <ArenaPanel v-if="arenaOpen && arena" :state="arena" @close="closeArena" @changed="load" />
       <WaveChest v-if="chestOpen && chest && battle" :gold="chest.gold" :energy="chest.energy" :repair="chest.repair" :crowns="battle.wave.crowns" @close="closeChest" />
 
       <!-- The same horde for screen readers and keyboards: the 3D scene is decorative. -->
@@ -295,6 +310,8 @@ const resultTitle = computed(() => {
 .timer { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border: 2px solid var(--g-ink); border-radius: 999px; background: linear-gradient(#fff7de, #f5e7c6); font: 800 14px var(--font-game); color: #5a3a1e; box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3); }
 .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .pulse { animation: pulse 1.2s ease-in-out infinite; }
+.arena-btn { position: relative; }
+.cnt { position: absolute; top: -10px; right: -10px; display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; border: 2px solid var(--g-ink); border-radius: 999px; background: var(--g-red); color: #fff; font: 900 13px var(--font-game); font-style: normal; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
 .hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 5; padding: 8px 18px; border: 2px solid var(--g-ink); border-radius: 999px; background: rgba(24, 30, 72, 0.85); font-size: 15px; white-space: nowrap; pointer-events: none; }
 .bctl { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 6; display: flex; gap: 12px; }

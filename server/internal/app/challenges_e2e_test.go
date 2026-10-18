@@ -50,7 +50,7 @@ func TestDirectChallenge(t *testing.T) {
 		t.Fatal("accepted")
 	}
 	city := alexey.must(200, "GET", "/challenges/"+id+"/city", nil, "").Body
-	if len(city["buildings"].([]any)) == 0 {
+	if len(city["buildings"].([]any)) == 0 || city["opponent_id"] != dmitryID || city["defense"] == nil {
 		t.Fatalf("challenge city: %v", city)
 	}
 	b := alexey.must(201, "POST", "/challenges/"+id+"/attack", map[string]any{"army": map[string]int{"guard": 1}}, "").Body
@@ -58,10 +58,16 @@ func TestDirectChallenge(t *testing.T) {
 		t.Fatalf("battle: %v", b)
 	}
 	alexey.refused("challenge_closed", "POST", "/challenges/"+id+"/attack", map[string]any{"army": map[string]int{"guard": 1}})
+	// Both sides of a battle can see the defender's city for the replay; nobody else can.
+	if len(alexey.must(200, "GET", "/battles/"+b["id"].(string)+"/city", nil, "").Body["buildings"].([]any)) == 0 {
+		t.Fatal("battle city for the attacker")
+	}
+	dmitry.must(200, "GET", "/battles/"+b["id"].(string)+"/city", nil, "")
+	maria.refused("not_found", "GET", "/battles/"+b["id"].(string)+"/city", nil)
 
 	// The defender sees what happened to the city, with the way back to answer.
 	mine := dmitry.must(200, "GET", "/challenges", nil, "").Body
-	if len(mine["against_me"].([]any)) != 1 || mine["against_me"].([]any)[0].(map[string]any)["id"] != b["id"] {
+	if am := mine["against_me"].([]any); len(am) != 1 || am[0].(map[string]any)["id"] != b["id"] || am[0].(map[string]any)["attacker_id"] != alexeyID {
 		t.Fatalf("against_me: %v", mine["against_me"])
 	}
 	if challengeIn(mine["incoming"].([]any), id) != nil {
