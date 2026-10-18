@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
 import Portrait3D from '../components/Portrait3D.vue'
 import CampScene3D from '../components/CampScene3D.vue'
+import ReinforcePanel from '../components/ReinforcePanel.vue'
 import GameOff from '../components/GameOff.vue'
 import { api } from '../api'
 import { duration, num } from '../lib/format'
@@ -164,6 +165,8 @@ const qProgress = (q: QueueItem) => {
         </li>
       </ul>
     </section>
+
+    <ReinforcePanel v-if="army" @changed="load" />
 
     <section class="g-panel queue">
       <span class="g-ribbon"><b>Очередь обучения</b></span>

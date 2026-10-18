@@ -392,6 +392,74 @@ function grandHall(k: Kit, g: THREE.Group, level: number, live: Live) {
   }
 }
 
+/** Team banner: a tall pole with the team's flag over a stone base and shields; a crown plaque and a second pennant by level. */
+function banner(k: Kit, g: THREE.Group, level: number) {
+  k.mk(k.cyl(0.55, 0.65, 0.22, 8), k.M(STONE_D), 0, 0.11, 0, g)
+  k.mk(k.cyl(0.42, 0.5, 0.2, 8), k.M(level >= 2 ? STONE_L : STONE), 0, 0.32, 0, g)
+  k.mk(k.cyl(0.05, 0.06, 2.6, 8), k.M(WOOD_D), 0, 1.6, 0, g)
+  k.mk(k.sph(0.1, 10, 8), k.M(GOLD), 0, 2.95, 0, g)
+  // The big team flag: blue with a gold stripe.
+  const F = k.grp(g, 0.05, 2.45, 0)
+  k.mk(k.rb(0.95, 0.62, 0.03, 0.01), k.M(0x3e8ef0), 0.5, 0, 0, F)
+  k.mk(k.rb(0.95, 0.1, 0.035, 0.01), k.M(GOLD), 0.5, -0.12, 0, F)
+  k.mk(k.cone(0.12, 0.18, 4), k.M(GOLD), 0.5, 0.08, 0.02, F).rotation.x = Math.PI / 2
+  // Shields around the base.
+  for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2 + 0.5; const sh = k.mk(k.cyl(0.18, 0.18, 0.05, 12), k.M(i % 2 ? 0x3e8ef0 : 0xd0453a), Math.cos(a) * 0.5, 0.42, Math.sin(a) * 0.5, g); sh.rotation.set(Math.PI / 2, 0, -a + Math.PI / 2) }
+  if (level >= 2) k.flag(g, 0, 1.9, 0, 0.5, 0.26, 0xffd34a, 0x3e8ef0)
+  if (level >= 3) { k.mk(k.rb(0.5, 0.3, 0.06, 0.03), k.M(GOLD), 0, 0.9, 0.08, g); for (const x of [-0.14, 0, 0.14]) k.mk(k.cone(0.05, 0.1, 4), k.M(GOLD), x, 1.1, 0.08, g) }
+}
+
+/** Team flags: two poles with pennants in the team's colours. */
+function flags(k: Kit, g: THREE.Group) {
+  for (const [x, c] of [[-0.35, 0x3e8ef0], [0.35, 0xffd34a]] as const) {
+    k.mk(k.cyl(0.1, 0.12, 0.1, 8), k.M(STONE), x, 0.05, 0, g)
+    k.mk(k.cyl(0.03, 0.03, 1.5, 6), k.M(WOOD_D), x, 0.8, 0, g)
+    k.flag(g, x, 1.45, 0, 0.45, 0.26, c, c === 0x3e8ef0 ? GOLD : 0x3e8ef0)
+  }
+}
+
+/** Triumphal arch: two stone piers, a rounded vault, a gold crown on top. */
+function arch(k: Kit, g: THREE.Group) {
+  for (const x of [-0.55, 0.55]) {
+    k.mk(k.rb(0.36, 1.3, 0.5, 0.05), k.M(STONE_L), x, 0.65, 0, g)
+    k.mk(k.rb(0.44, 0.12, 0.58, 0.03), k.M(STONE_D), x, 0.06, 0, g)
+  }
+  k.mk(k.geo('vault', () => new THREE.TorusGeometry(0.55, 0.16, 8, 16, Math.PI)), k.M(STONE_L), 0, 1.3, 0, g)
+  k.mk(k.rb(1.5, 0.22, 0.56, 0.05), k.M(STONE), 0, 1.92, 0, g)
+  k.mk(k.rb(1.6, 0.06, 0.6, 0.02), k.M(GOLD), 0, 2.05, 0, g)
+  for (const x of [-0.16, 0, 0.16]) k.mk(k.cone(0.07, 0.18, 4), k.M(GOLD), x, 2.17, 0, g)
+}
+
+/** Fountain: a round basin, a column and a small upper bowl with water. */
+function fountain(k: Kit, g: THREE.Group, live: Live) {
+  k.mk(k.cyl(0.78, 0.84, 0.3, 18), k.M(STONE_L), 0, 0.15, 0, g)
+  k.mk(k.cyl(0.66, 0.66, 0.06, 18), k.M(0x4db4f0), 0, 0.28, 0, g)
+  k.mk(k.cyl(0.1, 0.14, 0.8, 10), k.M(STONE), 0, 0.6, 0, g)
+  k.mk(k.cyl(0.36, 0.2, 0.16, 14), k.M(STONE_L), 0, 1.02, 0, g)
+  k.mk(k.cyl(0.3, 0.3, 0.04, 14), k.M(0x7fd0ff), 0, 1.1, 0, g)
+  k.mk(k.sph(0.08, 10, 8), k.M(0x9fe0ff), 0, 1.22, 0, g)
+  const gl = k.glow(0xbfe9ff, 1.2, 0.45)
+  gl.position.set(0, 0.9, 0)
+  g.add(gl)
+  live.glows ??= []
+  live.glows.push(gl)
+}
+
+/** Statue: a defender with shield and spear on a stepped pedestal, all in pale stone. */
+function statue(k: Kit, g: THREE.Group) {
+  k.mk(k.rb(0.9, 0.2, 0.9, 0.04), k.M(STONE_D), 0, 0.1, 0, g)
+  k.mk(k.rb(0.66, 0.5, 0.66, 0.05), k.M(STONE), 0, 0.45, 0, g)
+  k.mk(k.rb(0.5, 0.06, 0.04, 0.01), k.M(GOLD), 0, 0.5, 0.34, g)
+  const S = k.grp(g, 0, 0.7, 0), P = 0xe6e0d2
+  for (const x of [-0.1, 0.1]) k.mk(k.caps(0.08, 0.18), k.M(P), x, 0.15, 0, S)
+  k.mk(k.rb(0.42, 0.42, 0.3, 0.1), k.M(P), 0, 0.55, 0, S)
+  k.mk(k.sph(0.2, 12, 10), k.M(P), 0, 0.92, 0, S)
+  k.mk(k.sph(0.22, 12, 8), k.M(P), 0, 0.98, 0, S).scale.set(1, 0.7, 1)
+  k.mk(k.cyl(0.22, 0.22, 0.05, 14), k.M(P), -0.3, 0.55, 0.12, S).rotation.x = Math.PI / 2
+  k.mk(k.cyl(0.025, 0.025, 1.2, 6), k.M(P), 0.28, 0.75, 0.05, S)
+  k.mk(k.cone(0.05, 0.16, 6), k.M(P), 0.28, 1.4, 0.05, S)
+}
+
 /** Decor: road pavers that join their neighbours, trees, a flower bed, a lantern, a pond. Looks only. */
 function road(k: Kit, g: THREE.Group, joins: { e: boolean; s: boolean }) {
   k.mk(k.rb(1.5, 0.06, 1.5, 0.04), k.M(0xc9b48c), 0, 0.04, 0, g)
@@ -507,13 +575,18 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
     case 'trap': trap(k, inner, Math.min(2, L)); break
     case 'stable': stable(k, inner, Math.min(2, L)); inner.scale.setScalar(0.85); break
     case 'crossbow': crossbow(k, inner, Math.min(3, L)); break
+    case 'banner': banner(k, inner, Math.min(3, L)); break
+    case 'flags': flags(k, inner); break
+    case 'arch': arch(k, inner); inner.scale.setScalar(0.85); break
+    case 'fountain': fountain(k, inner, live); break
+    case 'statue': statue(k, inner); break
     case 'road': road(k, inner, joins); break
     case 'tree': tree(k, inner, joins.s); break
     case 'flowers': flowers(k, inner); break
     case 'lantern': lantern(k, inner, live); break
     case 'pond': pond(k, inner); break
   }
-  const flat = type === 'road' || type === 'pond' || type === 'flowers' || type === 'trap'
+  const flat = type === 'road' || type === 'pond' || type === 'flowers' || type === 'trap' || type === 'fountain'
   if (type !== 'wall' && !flat) k.outline(inner, 0.03)
   if (!flat) k.blob(g, 0, 0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.3 : 2.0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.1 : 1.7, 0.4)
   return g

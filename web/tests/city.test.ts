@@ -19,3 +19,12 @@ test('the defence line names every visible defence', async () => {
   assert.equal(defenseLine({ ...d, mortars: 1, crossbows: 2 }), 'башни 3 · мортиры 1 · арбалеты 2 · стены 12')
   assert.equal(defenseLine({ ...d, traps: 2 }), 'башни 3 · стены 12 · ловушки 2')
 })
+
+test('reward decor waits for the team to earn it', async () => {
+  const { placeBlock } = await import('../src/lib/city.ts')
+  const arch = { type: 'arch', name: 'Арка', description: '', max_count: [1], decor: true, reward: 'Команда отбила волну на три короны.', defense: false, levels: [{ level: 1, cost: 0, seconds: 0, requires_th: 1, hp: 0 }] }
+  const c = (won: boolean) => ({ townhall: 2, buildings: [], limits: { arch: { built: 0, allowed: 1 } }, rewards: { arch: won } })
+  const p = { gold: 0, builders_busy: 0, debt: false }
+  assert.match(placeBlock(arch as never, c(false) as never, p as never, 2), /три короны/)
+  assert.equal(placeBlock(arch as never, c(true) as never, p as never, 2), '')
+})
