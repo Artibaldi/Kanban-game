@@ -149,6 +149,26 @@ func settle(ctx context.Context, tx pgx.Tx, userID string) error {
 			return err
 		}
 	}
+	// Workshop research whose timer has run out.
+	rows, err = tx.Query(ctx, `UPDATE troop_levels t SET level=target_level, target_level=NULL, started_at=NULL, busy_until=NULL
+ WHERE (t.user_id, t.type) IN (SELECT user_id, type FROM troop_levels WHERE busy_until<=now() AND ($1='' OR user_id::text=$1) FOR UPDATE SKIP LOCKED)
+ RETURNING t.user_id::text, t.type, t.level`, userID)
+	if err != nil {
+		return err
+	}
+	raised, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (done, error) {
+		var d done
+		err := row.Scan(&d.user, &d.kind, &d.level)
+		return d, err
+	})
+	if err != nil {
+		return err
+	}
+	for _, d := range raised {
+		if err = auditUser(ctx, tx, d.user, "army.researched", "troops", d.kind, game.Troops[d.kind].Name+": уровень "+itoa(d.level)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

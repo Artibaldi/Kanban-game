@@ -57,7 +57,7 @@ func duelists(ctx context.Context, q dbtx, a actor, st game.Settings, only strin
 			return nil, 0, err
 		}
 		list[i].TownHall = c.TownHall()
-		list[i].Defense = game.DefenseOf(c)
+		list[i].Defense = game.DefenseOf(c).Visible()
 		if today >= limit {
 			list[i].Reason = "Лимит дружеских боёв на сегодня исчерпан"
 		} else {
@@ -125,7 +125,7 @@ func (s *Server) duelCity(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "not_found", "Коллега не найден или не принимает дружеские бои.")
 		return
 	}
-	c, err := cityDTO(ctx, s.db, id)
+	c, err := rivalCityDTO(ctx, s.db, id)
 	if err != nil {
 		failErr(w, err)
 		return
@@ -307,15 +307,24 @@ func (s *Server) fightFriendly(ctx context.Context, tx pgx.Tx, a actor, defender
 	}
 	defense := game.DefenseOf(defCity)
 	seed := rand.Int64N(1 << 53) // fits a JavaScript number exactly
-	outcome := game.Fight(army, nil, defense, seed, st.RandomSpread)
+	levels, _, err := troopLevels(ctx, tx, a.ID)
+	if err != nil {
+		return "", err
+	}
+	used := map[string]int{}
+	for k := range army {
+		used[k] = levels[k]
+	}
+	outcome := game.Fight(army, used, defense, seed, st.RandomSpread)
 	armyJSON, _ := json.Marshal(army)
+	levelsJSON, _ := json.Marshal(used)
 	lossJSON, _ := json.Marshal(outcome.Losses)
 	defJSON, _ := json.Marshal(defense)
 	roundsJSON, _ := json.Marshal(outcome.Rounds)
 	var battleID string
-	if err = tx.QueryRow(ctx, `INSERT INTO battles(kind,attacker_id,defender_id,seed,army,losses,defense,rounds,destruction,stars,gold_reward,xp_reward,attacker_trophies,defender_trophies,challenge_id)
- VALUES('friendly',$1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,0,0,$11) RETURNING id::text`,
-		a.ID, defenderID, seed, armyJSON, lossJSON, defJSON, roundsJSON, outcome.Destruction, outcome.Stars, st.FriendlyXP, challengeID).Scan(&battleID); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO battles(kind,attacker_id,defender_id,seed,army,losses,defense,rounds,destruction,stars,gold_reward,xp_reward,attacker_trophies,defender_trophies,challenge_id,troop_levels)
+ VALUES('friendly',$1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,0,0,$11,$12) RETURNING id::text`,
+		a.ID, defenderID, seed, armyJSON, lossJSON, defJSON, roundsJSON, outcome.Destruction, outcome.Stars, st.FriendlyXP, challengeID, levelsJSON).Scan(&battleID); err != nil {
 		return "", err
 	}
 	if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "battle_reward", XP: st.FriendlyXP, BattleID: battleID,
@@ -356,7 +365,12 @@ func (s *Server) battleCity(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	c, err := cityDTO(ctx, s.db, def)
+	// The attacker replays on today's layout without today's traps; the defender sees their own city.
+	load := rivalCityDTO
+	if a.ID == def {
+		load = cityDTO
+	}
+	c, err := load(ctx, s.db, def)
 	if err != nil {
 		failErr(w, err)
 		return
