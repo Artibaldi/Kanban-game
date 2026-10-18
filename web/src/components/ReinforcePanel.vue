@@ -18,7 +18,11 @@ const busy = ref('')
 async function load() {
   try {
     state.value = await api.get<BannerState>('/banner')
-    for (const m of state.value.team) pick.value[m.user_id!] ??= { type: firstReady(), count: 1 }
+    // A chosen type with nothing left at home switches to one that is ready.
+    for (const m of state.value.team) {
+      const p = pick.value[m.user_id!]
+      if (!p || !(state.value.troops[p.type] > 0)) pick.value[m.user_id!] = { type: firstReady(), count: 1 }
+    }
   } catch (e) { toasts.error(e) }
 }
 const firstReady = () => Object.entries(state.value?.troops || {}).find(([, n]) => n > 0)?.[0] || 'guard'
@@ -36,6 +40,7 @@ async function send(id: string, name: string) {
   busy.value = id
   try {
     state.value = await api.post<BannerState>('/banner/donate', { to_id: id, type: p.type, count: p.count })
+    if (!(state.value.troops[p.type] > 0)) pick.value[id] = { type: firstReady(), count: 1 }
     toasts.push({ kind: 'success', title: `${name}: подкрепление на знамени` }, 2500)
     emit('changed')
   } catch (e) { toasts.error(e) } finally { busy.value = '' }

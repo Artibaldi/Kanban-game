@@ -118,6 +118,10 @@ func settleWave(ctx context.Context, tx pgx.Tx, w waveRow, now time.Time) error 
 		if err != nil {
 			return err
 		}
+		// Locked first: troops moving between banners mid-count could otherwise be counted twice.
+		if err = lockPlayers(ctx, tx, members...); err != nil {
+			return err
+		}
 		if bonus, err = teamDefenseBonus(ctx, tx, st, members); err != nil {
 			return err
 		}

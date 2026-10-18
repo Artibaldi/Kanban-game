@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -38,6 +40,14 @@ func TestBannerReinforcements(t *testing.T) {
 	held := mine["reinforcements"].([]any)
 	if num(mine["held"]) != 4 || len(held) != 1 || held[0].(map[string]any)["donor_id"] != alexeyID || num(held[0].(map[string]any)["count"]) != 4 {
 		t.Fatalf("maria's banner: %v", mine)
+	}
+	// The team feed says who reinforced whom, never how many: no tallies of who gave what.
+	var feed struct{ Items []map[string]any }
+	_ = json.Unmarshal([]byte(maria.must(200, "GET", "/events?limit=50", nil, "").Raw), &feed)
+	for _, e := range feed.Items {
+		if sum := e["summary"].(string); strings.Contains(sum, "знамя") && strings.ContainsAny(sum, "×0123456789") {
+			t.Fatalf("the feed counts troops: %q", sum)
+		}
 	}
 	alexey.refused("banner_full", "POST", "/banner/donate", map[string]any{"to_id": mariaID, "type": "ram", "count": 2})
 	alexey.refused("invalid_target", "POST", "/banner/donate", map[string]any{"to_id": alexeyID, "type": "guard", "count": 1})
@@ -91,5 +101,43 @@ func TestRewardDecorNeedsTheTeamsCrowns(t *testing.T) {
 	alexey.must(201, "POST", "/city/buildings", map[string]any{"type": "arch", "x": 2, "y": 13}, "")
 	if num(alexey.must(200, "GET", "/player", nil, "").Body["gold"]) != gold {
 		t.Fatal("reward decor is free")
+	}
+}
+
+// Sending and releasing at the same time must queue up, never deadlock (a deadlock surfaces as 409 «busy»).
+func TestDonateAndReleaseRace(t *testing.T) {
+	ts, pool, _ := testServer(t)
+	alexey, maria, dmitry := login(t, ts, "alexey"), login(t, ts, "maria"), login(t, ts, "dmitry")
+	mariaID := meID(t, maria)
+	if _, err := pool.Exec(context.Background(), `INSERT INTO buildings(user_id,type,level,x,y) SELECT id,'banner',3,2,2 FROM users WHERE login='maria';
+	 UPDATE troops SET count=count+200 WHERE type='guard' AND user_id IN (SELECT id FROM users WHERE login IN ('alexey','dmitry'))`); err != nil {
+		t.Fatal(err)
+	}
+	errs := make(chan string, 200)
+	done := make(chan bool)
+	for _, c := range []*client{alexey, dmitry} {
+		go func(c *client) {
+			for i := 0; i < 25; i++ {
+				if r := c.do("POST", "/banner/donate", map[string]any{"to_id": mariaID, "type": "guard", "count": 1}, ""); r.Status >= 500 || r.Body["code"] == "busy" {
+					errs <- r.Raw
+				}
+			}
+			done <- true
+		}(c)
+	}
+	go func() {
+		for i := 0; i < 25; i++ {
+			if r := maria.do("POST", "/banner/release", map[string]any{}, ""); r.Status >= 500 || r.Body["code"] == "busy" {
+				errs <- r.Raw
+			}
+		}
+		done <- true
+	}()
+	for i := 0; i < 3; i++ {
+		<-done
+	}
+	close(errs)
+	for e := range errs {
+		t.Fatalf("server error under concurrency: %s", e)
 	}
 }

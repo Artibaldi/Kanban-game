@@ -55,6 +55,31 @@ func teamCrowns(ctx context.Context, q dbtx, teamID string) ([]int, error) {
 	return pgx.CollectRows(rows, pgx.RowTo[int])
 }
 
+// lockTeamLending: one lending operation at a time per team (send, release, a member moving away), so the set of
+// donors and owners cannot change under it and the players below can be locked in a single id-ordered statement.
+func lockTeamLending(ctx context.Context, tx pgx.Tx, teamID string) error {
+	if teamID == "" {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('lending:' || $1))`, teamID)
+	return err
+}
+
+// lockLending locks userID together with everyone whose troops it holds (and, unless ownerOnly, everyone holding
+// its troops) in one id-ordered statement. Call it under lockTeamLending.
+func lockLending(ctx context.Context, tx pgx.Tx, userID string, ownerOnly bool) error {
+	rows, err := tx.Query(ctx, `SELECT donor_id::text FROM reinforcements WHERE owner_id=$1
+ UNION SELECT owner_id::text FROM reinforcements WHERE NOT $2 AND donor_id=$1`, userID, ownerOnly)
+	if err != nil {
+		return err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
+	}
+	return lockPlayers(ctx, tx, append(ids, userID)...)
+}
+
 // returnReinforcements sends home every troop lent by or to userID (released, or when someone leaves the team).
 // Troops come back even over the camp's housing: nothing lent is ever lost.
 func returnReinforcements(ctx context.Context, tx pgx.Tx, userID string, ownerOnly bool) error {
@@ -191,9 +216,20 @@ func (s *Server) donate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return 0, nil, err
 		}
-		// Both players, in a fixed order, so two colleagues sending to each other cannot deadlock.
+		// Both players, in a fixed order, under the team's lending lock: no other send or release can interleave.
+		if err = lockTeamLending(ctx, tx, a.TeamID); err != nil {
+			return 0, nil, err
+		}
 		if err = lockPlayers(ctx, tx, a.ID, in.ToID); err != nil {
 			return 0, nil, err
+		}
+		// Checked again under the users' rows: an administrator moving either of them waits for us, or we see the move.
+		var same bool
+		if err = tx.QueryRow(ctx, `SELECT count(*)=2 AND count(DISTINCT team_id)=1 AND bool_and(active) FROM (SELECT team_id, active FROM users WHERE id IN ($1,$2) FOR SHARE) u`, a.ID, in.ToID).Scan(&same); err != nil {
+			return 0, nil, err
+		}
+		if !same {
+			return 0, nil, refuse(404, "not_found", "Коллега не найден в вашей команде.")
 		}
 		if _, _, _, err = gameTx(ctx, tx, a); err != nil {
 			return 0, nil, err
@@ -220,7 +256,7 @@ func (s *Server) donate(w http.ResponseWriter, r *http.Request) {
  ON CONFLICT (owner_id,donor_id,type) DO UPDATE SET count=reinforcements.count+EXCLUDED.count`, in.ToID, a.ID, in.Type, in.Count); err != nil {
 			return 0, nil, err
 		}
-		if err = audit(ctx, tx, a.ID, a.TeamID, "banner.reinforced", "user", in.ToID, fmt.Sprintf("Подкрепление на знамя: %s × %d → %s", game.Troops[in.Type].Name, in.Count, name)); err != nil {
+		if err = audit(ctx, tx, a.ID, a.TeamID, "banner.reinforced", "user", in.ToID, fmt.Sprintf("Подкрепление на знамя → %s", name)); err != nil {
 			return 0, nil, err
 		}
 		out, err := bannerDTO(ctx, tx, a)
@@ -235,26 +271,25 @@ func (s *Server) release(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, _ []byte) (int, any, error) {
+		// Donors' camps change too: lock the owner and every donor together, in id order, before anything else.
+		if err := lockTeamLending(ctx, tx, a.TeamID); err != nil {
+			return 0, nil, err
+		}
+		if err := lockLending(ctx, tx, a.ID, true); err != nil {
+			return 0, nil, err
+		}
 		if _, _, _, err := gameTx(ctx, tx, a); err != nil {
 			return 0, nil, err
 		}
-		// Donors' camps change too: lock everyone involved, in order.
-		rows, err := tx.Query(ctx, `SELECT DISTINCT donor_id::text FROM reinforcements WHERE owner_id=$1`, a.ID)
-		if err != nil {
+		var lent int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM reinforcements WHERE owner_id=$1`, a.ID).Scan(&lent); err != nil {
 			return 0, nil, err
 		}
-		donors, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
+		if err := returnReinforcements(ctx, tx, a.ID, true); err != nil {
 			return 0, nil, err
 		}
-		if err = lockPlayers(ctx, tx, append(donors, a.ID)...); err != nil {
-			return 0, nil, err
-		}
-		if err = returnReinforcements(ctx, tx, a.ID, true); err != nil {
-			return 0, nil, err
-		}
-		if len(donors) > 0 {
-			if err = audit(ctx, tx, a.ID, a.TeamID, "banner.released", "user", a.ID, "Подкрепления со знамени вернулись домой"); err != nil {
+		if lent > 0 {
+			if err := audit(ctx, tx, a.ID, a.TeamID, "banner.released", "user", a.ID, "Подкрепления со знамени вернулись домой"); err != nil {
 				return 0, nil, err
 			}
 		}

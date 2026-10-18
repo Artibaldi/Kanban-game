@@ -23,6 +23,7 @@ const counts = ref<Record<string, number>>({ guard: 1, raider: 1, archer: 1, rid
 const busy = ref('')
 const now = ref(Date.now())
 const flat = ref(false)
+const reinforce = ref<InstanceType<typeof ReinforcePanel>>()
 let offset = 0, tick = 0, reloading = false
 
 async function load() {
@@ -31,6 +32,8 @@ async function load() {
     offset = new Date(a.server_time).getTime() - Date.now()
     army.value = a
     game.setPlayer(a.player)
+    // Ready counts for sending reinforcements follow the camp.
+    reinforce.value?.load()
   } catch (e) { toasts.error(e) }
 }
 onMounted(async () => {
@@ -58,6 +61,8 @@ function block(type: string) {
   if (army.value?.locked[type]) return army.value.locked[type]
   if (p.value.debt) return 'Сначала погасите долг.'
   if (p.value.army_capacity === 0) return 'Постройте казарму.'
+  // Troops back from a banner may overfill the camp; nothing is lost, training just waits for room.
+  if (free.value <= 0) return 'Лагерь заполнен: войска вернулись со знамени сверх мест.'
   if (t.housing * n > free.value) return `Не хватает мест: свободно ${free.value}.`
   if (t.cost * n > p.value.energy) return `Нужно ${t.cost * n} энергии.`
   return ''
@@ -166,7 +171,7 @@ const qProgress = (q: QueueItem) => {
       </ul>
     </section>
 
-    <ReinforcePanel v-if="army" @changed="load" />
+    <ReinforcePanel v-if="army" ref="reinforce" @changed="load" />
 
     <section class="g-panel queue">
       <span class="g-ribbon"><b>Очередь обучения</b></span>
