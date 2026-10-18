@@ -52,7 +52,11 @@ async function pick(o: Duelist) {
   selected.value = o
   preview.value = null
   attackKey = newIdempotencyKey()
-  try { preview.value = await api.get<City>(`/duels/${o.user_id}/city`) } catch (e) { toasts.error(e) }
+  try {
+    const c = await api.get<City>(`/duels/${o.user_id}/city`)
+    // A slow answer for a colleague no longer selected must not replace the current one.
+    if (selected.value === o) preview.value = c
+  } catch (e) { if (selected.value === o) toasts.error(e) }
 }
 const housing = computed(() => Object.entries(squad.value).reduce((n, [k, v]) => n + (game.troop(k)?.housing || 1) * (v || 0), 0))
 const total = computed(() => Object.values(squad.value).reduce((n, v) => n + (v || 0), 0))

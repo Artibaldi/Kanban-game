@@ -42,6 +42,8 @@ onUnmounted(() => clearTimeout(timer))
 
 const b = computed(() => battle.value)
 const start = computed(() => b.value ? { wall_hp: b.value.defense.wall_hp, tower_hp: b.value.defense.tower_hp, townhall_hp: b.value.defense.townhall_hp, other_hp: b.value.defense.other_hp } : null)
+/** Every event up to round i: walls, towers and the town hall fall by them. */
+const eventsUpTo = (i: number) => (b.value?.rounds.slice(0, i).flatMap(r => r.events) ?? [])
 const stateAt = (i: number) => (!b.value || i <= 0 ? start.value! : b.value.rounds[i - 1])
 const cur = computed(() => (b.value && step.value > 0 ? b.value.rounds[step.value - 1] : null))
 const shown = computed(() => Object.fromEntries(Object.entries(b.value?.army || {}).map(([k, n]) => [k, shownCount(n)])))
@@ -65,14 +67,14 @@ const hp = computed(() => {
 const ruinedTypes = computed<BuildingType[]>(() => {
   if (!start.value) return []
   const out: BuildingType[] = []
-  for (const p of ruinedAt(start.value, stateAt(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage'] as BuildingType[]) : [p as BuildingType]))
+  for (const p of ruinedAt(start.value, stateAt(step.value), eventsUpTo(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage'] as BuildingType[]) : [p as BuildingType]))
   return out
 })
 
 function beat(i: number, dur: number) {
   const r = stateAt(i), round = b.value!.rounds[i - 1]
   const figs = Object.fromEntries(Object.entries(b.value!.army).map(([k, n]) => [k, aliveShown(round.alive[k] ?? 0, n, shown.value[k])]))
-  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r), figs, dur / 1000)
+  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000)
 }
 function play() {
   if (!b.value) return
@@ -101,6 +103,8 @@ function finish() {
     if (step.value === 0) { scene.value?.clear(); scene.value?.start(b.value.army, shown.value) }
     step.value = n
     beat(n, 10)
+    // The fight is over: no more swings or trembling behind the result.
+    scene.value?.cheer()
   } else step.value = n
   playing.value = false
   dropStars()
@@ -111,7 +115,12 @@ function dropStars() {
   timer = window.setTimeout(() => drop(1), reduced() ? 0 : 500)
   nextTick(() => document.querySelector<HTMLElement>('.result .g-btn')?.focus())
 }
-function onReady() { ready.value = true; if (session.gameOn) play() }
+function onReady() {
+  ready.value = true
+  if (session.gameOn) play()
+  // Already showing the result (work mode): bring the scene to the end state too.
+  else finish()
+}
 
 const eventText: Record<string, string> = { wall_breached: 'Стены пробиты', towers_down: 'Башни разрушены', townhall_down: 'Ратуша пала' }
 function roundText(r: Battle['rounds'][number]) {
@@ -144,7 +153,7 @@ function roundText(r: Battle['rounds'][number]) {
           </div>
           <div class="g-box score" :aria-label="`Разрушения ${destruction}%`">
             <div class="pct g-stroke">{{ destruction }}%</div>
-            <div class="sub">{{ step === 0 ? 'подготовка' : playing ? `раунд ${step} из ${b.rounds.length}` : 'бой окончен' }}</div>
+            <div class="sub" aria-live="polite">{{ done ? 'бой окончен' : step === 0 ? 'подготовка' : `раунд ${step} из ${b.rounds.length}` }}</div>
           </div>
           <div class="ctl">
             <template v-if="playing">
@@ -165,12 +174,13 @@ function roundText(r: Battle['rounds'][number]) {
           <div class="squad">
             <div v-for="(n, k) in b.army" :key="k" class="slot" :class="{ out: !alive[k] }" :title="`${game.troop(String(k))?.name}: ${alive[k] ?? n} из ${n}`">
               <Portrait3D :troop="String(k)" :size="52" :faded="!alive[k]" />
+              <span class="sr-only">{{ game.troop(String(k))?.name }}: в строю</span>
               <b class="g-stroke s2">{{ alive[k] ?? n }}/{{ n }}</b>
             </div>
           </div>
         </div>
 
-        <div v-if="done" class="result">
+        <div v-if="done" class="result" role="dialog" aria-label="Итог боя">
           <div class="g-panel pop">
             <span class="g-ribbon" :class="{ gold: won, red: !won }"><b>{{ won ? (iAttacked ? 'Победа!' : 'Город взят') : (iAttacked ? 'Атака отбита' : 'Оборона выстояла') }}</b></span>
             <div class="stars" :aria-label="`Звёзд: ${b.stars} из 3`">

@@ -20,6 +20,8 @@ export class BattleLayer {
   private smokeT = 0
   private puffs: { m: THREE.Mesh; life: number }[] = []
   private target: Part | null = null
+  /** The city's buildings, read once per round instead of every frame. */
+  private entries: ReturnType<CityStage['entries']> | null = null
 
   constructor(private city: CityStage) {
     city.onFrame = (dt, t) => this.frame(dt, t)
@@ -37,7 +39,8 @@ export class BattleLayer {
         const g = troopModel(k, type)
         g.scale.setScalar(type === 'ram' ? 0.8 : 0.95)
         k.blob(g, 0, 0, type === 'ram' ? 1.4 : 0.8, type === 'ram' ? 1.6 : 0.8, 0.45)
-        const x = (i - (total - 1) / 2) * 1.0
+        const gap = Math.min(1.0, (this.city.size + 2) / Math.max(1, total))
+        const x = (i - (total - 1) / 2) * gap
         g.position.set(x, 0.21, edge + (j % 2) * 0.7)
         g.rotation.y = Math.PI
         this.city.group.add(g)
@@ -52,15 +55,17 @@ export class BattleLayer {
    */
   round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number) {
     this.target = target
+    this.entries = null
     const k = this.city.toolkit
     // Fallen figures: the ones beyond the alive count, front of the squad first.
     for (const type of new Set(this.figs.map(f => f.type))) {
       const standing = this.figs.filter(f => f.type === type && f.alive)
-      for (const f of standing.slice(alive[type] ?? 0)) {
+      // The front of the squad falls first.
+      for (const f of standing.slice(0, Math.max(0, standing.length - (alive[type] ?? 0)))) {
         f.alive = false
         const p = f.g.position.clone(), g = f.g
-        k.tween(0.2, q => { g.rotation.x = (-Math.PI / 2) * eIn(q) })
-        k.wait(0.25, () => { k.poof(this.city.group, p.setY(0.6), 0.7, 3); this.city.group.remove(g) })
+        k.tween(0.2, q => { g.rotation.x = (-Math.PI / 2) * eIn(q) }, undefined, 'duel')
+        k.wait(0.25, () => { k.poof(this.city.group, p.setY(0.6), 0.7, 3); this.city.group.remove(g) }, 'duel')
       }
     }
     // Ruins.
@@ -105,13 +110,13 @@ export class BattleLayer {
     const r: Ruin = { id: e.id, mats, rot: e.model.rotation.z, sy: e.model.scale.y }
     this.ruins.set(e.id, r)
     const model = e.model, tilt = (rand() - 0.5) * 0.3
-    k.tween(0.35, q => { model.scale.y = r.sy * (1 - 0.4 * eOut(q)); model.rotation.z = r.rot + tilt * q })
+    k.tween(0.35, q => { model.scale.y = r.sy * (1 - 0.4 * eOut(q)); model.rotation.z = r.rot + tilt * q }, undefined, 'duel')
     k.poof(this.city.group, e.holder.position.clone().setY(0.8), 1.1, 6)
     k.debris(this.city.group, e.holder.position.clone().setY(1.0), 6)
   }
 
   private frame(dt: number, t: number) {
-    const k = this.city.toolkit
+    const k = this.city.toolkit, entries = this.entries ??= this.city.entries()
     for (const f of this.figs) {
       if (!f.alive) continue
       f.t += dt
@@ -123,7 +128,7 @@ export class BattleLayer {
       }
       const attacking = q >= 1 && !!f.target
       if (attacking) {
-        const e = this.city.entries().find(x => x.id === f.target)
+        const e = entries.find(x => x.id === f.target)
         if (e) { const d = e.holder.position.clone().sub(f.g.position); f.g.rotation.y = Math.atan2(d.x, d.z) }
       }
       animateTroop(f.g, f.type, t, f.ph, q < 1 ? 'walk' : attacking ? 'attack' : 'idle')
@@ -142,7 +147,7 @@ export class BattleLayer {
     this.smokeT += dt
     if (this.smokeT > 0.6 && this.ruins.size) {
       this.smokeT = 0
-      for (const e of this.city.entries()) {
+      for (const e of entries) {
         if (!this.ruins.has(e.id) || rand() > 0.5) continue
         const p = e.holder.position
         const m = k.mk(k.sph(0.22, 8, 6), k.MB(0x5a5550, { transparent: true, opacity: 0.8 }, true), p.x + (rand() - 0.5) * 0.6, p.y + e.height * 0.6, p.z + (rand() - 0.5) * 0.6, this.city.group)
@@ -158,7 +163,7 @@ export class BattleLayer {
       if (q.life > 2) { this.city.group.remove(q.m); k.release(q.m.material as THREE.Material); this.puffs.splice(i, 1) }
     }
     // The building under attack trembles.
-    if (this.target) for (const e of this.city.entries()) {
+    if (this.target) for (const e of entries) {
       if (partOf[e.type] !== this.target || this.ruins.has(e.id)) continue
       const hit = this.figs.some(f => f.alive && f.target === e.id && f.t >= f.dur)
       e.model.position.x = hit ? Math.sin(t * 60) * 0.03 : 0
@@ -168,12 +173,15 @@ export class BattleLayer {
   /** cheer: survivors hop when the battle is over. */
   cheer() {
     const k = this.city.toolkit
+    for (const e of this.city.entries()) e.model.position.x = 0
     for (const f of this.figs) if (f.alive) { const g = f.g, y = g.position.y; k.tween(0.5, q => { g.position.y = y + Math.sin(q * Math.PI * 2) * 0.35 * (1 - q) }) }
     this.target = null
   }
 
   /** clear: removes the squad and restores every ruined building (for a replay). */
   clear() {
+    // Unfinished falls and ruin tweens must not write into the restored city.
+    this.city.toolkit.cancel('duel')
     for (const f of this.figs) this.city.group.remove(f.g)
     for (const s of this.shots) this.city.group.remove(s.m)
     for (const p of this.puffs) { this.city.group.remove(p.m); this.city.toolkit.release(p.m.material as THREE.Material) }

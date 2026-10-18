@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // A rendered 3D portrait of a troop or a building, with the flat drawing as the fallback.
-import { onMounted, ref } from 'vue'
+import { ref, watchEffect } from 'vue'
 import TroopIcon from './TroopIcon.vue'
 import BuildingIcon from './BuildingIcon.vue'
 import type { BuildingType } from '../types'
@@ -9,10 +9,12 @@ const props = withDefaults(defineProps<{ troop?: string; building?: BuildingType
 const src = ref<string | null>(null)
 const failed = ref(false)
 
-onMounted(async () => {
+// Re-render when the card is reused for another troop, building or level.
+watchEffect(async () => {
+  const troop = props.troop, building = props.building, level = props.level
   try {
     const m = await import('../game3d/portraits')
-    src.value = props.troop ? m.troopPortrait(props.troop) : props.building ? m.buildingPortrait(props.building, props.level) : null
+    src.value = troop ? m.troopPortrait(troop) : building ? m.buildingPortrait(building, level) : null
   } catch { src.value = null }
   failed.value = !src.value
 })

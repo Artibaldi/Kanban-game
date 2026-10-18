@@ -12,10 +12,16 @@ export function targetOf(before: HP, after: HP): Part | null {
   return null
 }
 
-/** ruinedAt: parts brought to zero that had hit points to begin with. */
-export function ruinedAt(start: HP, now: HP): Set<Part> {
+const eventPart: Record<string, Part> = { wall_breached: 'wall', towers_down: 'tower', townhall_down: 'townhall' }
+
+/**
+ * ruinedAt: what lies in ruins. Walls, towers and the town hall fall by the server's events (it decides on exact
+ * hit points and only rounds them for display); other buildings have no event and fall at zero.
+ */
+export function ruinedAt(start: HP, now: HP, events: string[]): Set<Part> {
   const out = new Set<Part>()
-  for (const [part, key] of order) if (start[key] > 0 && now[key] <= 0) out.add(part)
+  for (const e of events) if (eventPart[e]) out.add(eventPart[e])
+  if (start.other_hp > 0 && now.other_hp <= 0) out.add('other')
   return out
 }
 

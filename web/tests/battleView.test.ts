@@ -15,9 +15,12 @@ test('the target of a round is the first category that lost hit points, in the o
   assert.equal(targetOf(round(0, 0, 0, 100), round(0, 0, 0, 100)), null, 'nothing was hit')
 })
 
-test('ruined categories are the ones at zero that had something to ruin', () => {
-  assert.deepEqual([...ruinedAt({ ...defense, wall_hp: 0 }, round(0, 0, 10, 500))].sort(), ['tower'])
-  assert.deepEqual([...ruinedAt(defense, round(0, 0, 0, 0))].sort(), ['other', 'tower', 'townhall', 'wall'])
+test('walls, towers and the town hall fall by the server events, not by rounded hit points', () => {
+  // The server rounds hit points for display but decides on exact values: 0.3 left shows as 0 and is not down.
+  assert.deepEqual([...ruinedAt(defense, round(0, 0, 0, 500), [])], [], 'no event yet: nothing in ruins')
+  assert.deepEqual([...ruinedAt(defense, round(0, 0, 0, 500), ['wall_breached', 'towers_down'])].sort(), ['tower', 'wall'])
+  assert.deepEqual([...ruinedAt(defense, round(0, 0, 0, 0), ['wall_breached', 'towers_down', 'townhall_down'])].sort(), ['other', 'tower', 'townhall', 'wall'])
+  assert.deepEqual([...ruinedAt({ ...defense, other_hp: 0 }, round(0, 0, 0, 0), [])], [], 'nothing to ruin is not a ruin')
 })
 
 test('destruction matches the server: walls do not count', () => {

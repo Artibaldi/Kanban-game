@@ -20,7 +20,7 @@ export class CampStage {
   private yard: THREE.Group
   private soldiers: Soldier[] = []
   private fire: THREE.Sprite[] = []
-  private counts: Record<string, number> = {}
+  private shown = false
   private tags = new Map<string, HTMLElement>()
   private W = 1; private H = 1; private T = 0
   private raf = 0
@@ -73,7 +73,7 @@ export class CampStage {
   setArmy(troops: Record<string, number>, animate: boolean) {
     const k = this.kit
     ORDER.forEach((type, row) => {
-      const want = Math.min(MAX_SHOWN, troops[type] || 0)
+      const want = Math.min(type === 'ram' ? 8 : MAX_SHOWN, troops[type] || 0)
       const mine = this.soldiers.filter(s => s.type === type)
       for (const s of mine.slice(want)) { this.yard.remove(s.g); this.soldiers.splice(this.soldiers.indexOf(s), 1) }
       for (let i = mine.length; i < want; i++) {
@@ -83,7 +83,8 @@ export class CampStage {
         const s: Soldier = { type, g, ph: rand() * 6 }
         k.blob(g, 0, 0, type === 'ram' ? 1.6 : 0.9, type === 'ram' ? 1.8 : 0.9, 0.45)
         this.yard.add(g)
-        if (animate && !k.reduced && (this.counts[type] ?? 0) > 0) {
+        // Everyone after the first render marches in, even a type's very first recruit.
+        if (animate && !k.reduced && this.shown) {
           const from = new THREE.Vector3(0, 0, 7.6)
           g.position.copy(from)
           s.walk = { from, to, t: -(i - mine.length) * 0.25 }
@@ -96,7 +97,7 @@ export class CampStage {
       tag.innerHTML = n ? `<b>×${n}</b>` : ''
       tag.style.display = n ? '' : 'none'
     })
-    this.counts = { ...troops }
+    this.shown = true
   }
 
   /** spot: ranks of four per type, rams at the back. */
@@ -106,7 +107,7 @@ export class CampStage {
     const x = (col - (per - 1) / 2) * gap
     // Each type has its own block, front to back: guards, raiders, rams.
     const base = [3.4, 1.0, -1.6][row]
-    const z = base - line * (type === 'ram' ? 1.9 : 1.0)
+    const z = base - line * (type === 'ram' ? 1.6 : 1.0)
     return new THREE.Vector3(x - 1.2, 0, z)
   }
 

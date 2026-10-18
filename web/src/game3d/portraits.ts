@@ -7,6 +7,8 @@ import { troopModel } from './troops'
 import { buildingModel } from './cityModels'
 
 const cache = new Map<string, string>()
+/** Once WebGL has failed, stop trying: every card falls back to the flat drawing. */
+let broken = false
 let renderer: THREE.WebGLRenderer | null = null
 let kit: Kit | null = null
 let idle = 0
@@ -47,22 +49,24 @@ function shoot(model: THREE.Object3D, zoom = 1): string {
 export function troopPortrait(type: string): string | null {
   const key = 't:' + type
   if (cache.has(key)) return cache.get(key)!
+  if (broken) return null
   try {
     const { k } = setup()
     const url = shoot(troopModel(k, type), 0.72)
     cache.set(key, url)
     return url
-  } catch { return null }
+  } catch { broken = true; return null }
 }
 
 /** buildingPortrait: a building of a given level for the build list. */
 export function buildingPortrait(type: BuildingType, level = 1): string | null {
   const key = `b:${type}:${level}`
   if (cache.has(key)) return cache.get(key)!
+  if (broken) return null
   try {
     const { k } = setup()
     const url = shoot(buildingModel(k, type, level, { e: type === 'wall', s: false }, { smoke: [] }), 1)
     cache.set(key, url)
     return url
-  } catch { return null }
+  } catch { broken = true; return null }
 }

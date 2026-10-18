@@ -51,7 +51,7 @@ function block(type: string) {
   const t = game.troop(type)
   if (!t || !p.value) return 'Загрузка…'
   const n = counts.value[type] || 0
-  if (n < 1) return 'Укажите количество.'
+  if (!Number.isInteger(n) || n < 1 || n > 50) return 'Количество — целое число от 1 до 50.'
   if (p.value.debt) return 'Сначала погасите долг.'
   if (p.value.army_capacity === 0) return 'Постройте казарму.'
   if (t.housing * n > free.value) return `Не хватает мест: свободно ${free.value}.`
@@ -66,6 +66,8 @@ async function train(type: string) {
     toasts.push({ kind: 'success', title: `Обучение: ${game.troop(type)?.name} × ${counts.value[type]}` }, 2500)
   } catch (e) { toasts.error(e) } finally { busy.value = '' }
 }
+/** clampCount: whole troops, 1 to 50, whatever was typed. */
+function clampCount(type: string) { const n = Math.floor(Number(counts.value[type]) || 1); counts.value[type] = Math.min(50, Math.max(1, n)) }
 function step(type: string, d: number) { counts.value[type] = Math.min(50, Math.max(1, (counts.value[type] || 0) + d)) }
 const qProgress = (q: QueueItem) => {
   const s = new Date(q.started_at).getTime(), e = new Date(q.finish_at).getTime()
@@ -97,7 +99,7 @@ const qProgress = (q: QueueItem) => {
 
     <div class="troops">
       <article v-for="t in game.config?.troops || []" :key="t.type" class="tcard" :class="t.type">
-        <header class="hd"><span class="g-stroke s2">{{ t.name }}</span><span class="ready g-stroke s2" :title="`Готово: ${army?.troops[t.type] ?? 0}`">×{{ army?.troops[t.type] ?? 0 }}</span></header>
+        <header class="hd"><span class="g-stroke s2">{{ t.name }}</span><span class="ready g-stroke s2"><span class="sr-only">готово </span>×{{ army?.troops[t.type] ?? 0 }}</span></header>
         <div class="art"><Portrait3D :troop="t.type" :size="120" /></div>
         <p class="role">{{ t.role }}</p>
         <dl class="stats">
@@ -110,7 +112,7 @@ const qProgress = (q: QueueItem) => {
           <div class="stepper" role="group" :aria-label="`Количество: ${t.name}`">
             <button class="g-btn blue small" aria-label="Меньше" :disabled="(counts[t.type] || 1) <= 1" @click="step(t.type, -1)"><span>−</span></button>
             <label class="sr-only" :for="`n-${t.type}`">Количество</label>
-            <input :id="`n-${t.type}`" v-model.number="counts[t.type]" type="number" min="1" max="50" class="count" />
+            <input :id="`n-${t.type}`" v-model.number="counts[t.type]" type="number" min="1" max="50" step="1" class="count" @change="clampCount(t.type)" />
             <button class="g-btn blue small" aria-label="Больше" :disabled="(counts[t.type] || 0) >= 50" @click="step(t.type, 1)"><span>+</span></button>
           </div>
           <span class="time"><Icon name="clock" :size="14" />{{ duration(t.seconds * (counts[t.type] || 0) * (game.config?.settings.time_scale || 1) * 1000) }}</span>
