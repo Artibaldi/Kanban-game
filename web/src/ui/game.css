@@ -70,6 +70,8 @@
 .g3-badge i { margin-left: 4px; padding: 3px 8px; border: 2px solid var(--g-ink); border-radius: 8px; background: var(--g-red); box-shadow: 0 2px 0 var(--g-ink); font: 900 13px var(--font-game); font-style: normal; color: #fff; -webkit-text-stroke: 2px var(--g-ink); paint-order: stroke fill; animation: g-bob 1.2s ease-in-out infinite; white-space: nowrap; }
 .g3-badge.review i { background: #3f9a1f; }
 .g3-badge.sel b { outline: 3px solid #fff; outline-offset: 2px; }
+.g3-badge.city b { background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); }
+.g3-badge .timer { padding: 3px 9px; border: 2px solid var(--g-ink); border-radius: 999px; background: linear-gradient(#fff7de, #f5e7c6); box-shadow: 0 2px 0 var(--g-ink); font: 800 13px var(--font-game); color: #5a3a1e; white-space: nowrap; }
 @keyframes g-bob { 50% { transform: translateY(-3px); } }
 .g3-lane { position: absolute; left: 0; top: 0; padding: 3px 10px; border: 2px solid var(--g-ink); border-radius: 9px; background: rgba(24, 30, 72, 0.75); white-space: nowrap;
   font: 900 15px var(--font-game); color: #fff; -webkit-text-stroke: 2px var(--g-ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--g-ink); }
