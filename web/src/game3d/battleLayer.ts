@@ -57,7 +57,7 @@ export class BattleLayer {
    * round: one beat. `target` is the part this round hit, `ruined` what lies in ruins after it,
    * `alive` how many figures of each type still stand; `fx` says whether mortars fired and traps sprang this round.
    */
-  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx: { mortar: boolean; trap: boolean } = { mortar: false, trap: false }) {
+  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx: { mortar: boolean; trap: boolean; crossbow?: boolean } = { mortar: false, trap: false }) {
     this.target = target
     this.entries = null
     const k = this.city.toolkit
@@ -101,7 +101,7 @@ export class BattleLayer {
     }
     // Standing towers shoot back at the squad; crossbow towers aim at the heavy figures first.
     const heavy = this.figs.filter(f => f.alive && (f.type === 'ram' || f.type === 'rider'))
-    for (const cb of this.city.entries().filter(e => e.type === 'crossbow' && !this.ruins.has(e.id))) for (let n = 0; n < 2; n++) {
+    if (fx.crossbow) for (const cb of this.city.entries().filter(e => e.type === 'crossbow' && !this.ruins.has(e.id))) for (let n = 0; n < 2; n++) {
       const pick = heavy.length ? heavy : this.figs.filter(f => f.alive)
       if (!pick.length) break
       const f = pick[Math.floor(rand() * pick.length)]

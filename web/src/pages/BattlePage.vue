@@ -11,6 +11,7 @@ import { reduced } from '../ui/motion'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
+import { defenseLine } from '../lib/city'
 import type { Battle, BuildingType, City } from '../types'
 
 const route = useRoute()
@@ -74,7 +75,7 @@ const ruinedTypes = computed<BuildingType[]>(() => {
 function beat(i: number, dur: number) {
   const r = stateAt(i), round = b.value!.rounds[i - 1]
   const figs = Object.fromEntries(Object.entries(b.value!.army).map(([k, n]) => [k, aliveShown(round.alive[k] ?? 0, n, shown.value[k])]))
-  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000, { mortar: !!round.mortar_damage, trap: round.events.includes('trap_sprung') })
+  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000, { mortar: !!round.mortar_damage, crossbow: !!round.crossbow_damage, trap: round.events.includes('trap_sprung') })
 }
 function play() {
   if (!b.value) return
@@ -214,7 +215,7 @@ function roundText(r: Battle['rounds'][number]) {
       <details class="card panel log-card">
         <summary><h2>Журнал боя</h2></summary>
         <ol class="log">
-          <li class="small">В бой вступили: {{ Object.entries(b.army).map(([k, n]) => `${game.troop(k)?.name} × ${n}`).join(', ') }}. Оборона: {{ b.defense.towers }} башен, {{ b.defense.walls }} стен.</li>
+          <li class="small">В бой вступили: {{ Object.entries(b.army).map(([k, n]) => `${game.troop(k)?.name} × ${n}`).join(', ') }}. Оборона: {{ defenseLine(b.defense) }}.</li>
           <li v-for="r in b.rounds.slice(0, step)" :key="r.n" class="small">
             <strong>Раунд {{ r.n }}.</strong> {{ roundText(r) }}
             <span v-for="e in r.events" :key="e" class="badge warning">{{ eventText[e] }}</span>

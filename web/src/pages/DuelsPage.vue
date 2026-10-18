@@ -11,6 +11,7 @@ import { ago, dateTime, num } from '../lib/format'
 import { useGame } from '../stores/game'
 import { useSession } from '../stores/session'
 import { useToasts } from '../stores/toast'
+import { defenseLine } from '../lib/city'
 import type { Battle, City, Duelist } from '../types'
 
 interface DuelList { items: Duelist[]; today: number; per_day: number; friendly_xp: number }
@@ -131,7 +132,7 @@ async function attack() {
           <span class="th g-stroke s2" :title="`Ратуша ${o.townhall}`">{{ o.townhall }}</span>
           <span class="grow">
             <strong>{{ o.display_name }}</strong>
-            <span class="meta">башни {{ o.defense.towers }} · стены {{ o.defense.walls }}</span>
+            <span class="meta">{{ defenseLine(o.defense) }}</span>
             <span v-if="!o.available" class="reason">{{ o.reason }}</span>
           </span>
         </button>
@@ -149,6 +150,8 @@ async function attack() {
           <span class="g-chip">Стены {{ num(selected.defense.wall_hp) }}</span>
           <span class="g-chip">Башни {{ num(selected.defense.tower_hp) }}</span>
           <span class="g-chip">Урон башен {{ selected.defense.tower_dps }}/залп</span>
+          <span v-if="selected.defense.mortars" class="g-chip">Мортиры: {{ selected.defense.mortars }}</span>
+          <span v-if="selected.defense.crossbows" class="g-chip">Арбалеты: {{ selected.defense.crossbows }}</span>
           <span class="g-chip">Ратуша {{ num(selected.defense.townhall_hp) }}</span>
         </div>
 

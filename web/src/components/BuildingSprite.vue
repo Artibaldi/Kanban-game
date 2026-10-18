@@ -39,7 +39,8 @@ const art = computed(() => {
   const stone = props.ruined ? [v('ruin'), v('ruin'), v('ruin')] : [v('stone-light'), v('stone'), v('stone-dark')]
   switch (props.type) {
     case 'townhall': {
-      const w = 22 + L * 1.6, h = 16 + L * 4
+      // Town halls 6–7 keep the citadel's size in the flat view; the 3D model shows their extras.
+      const w = 22 + Math.min(5, L) * 1.6, h = 16 + Math.min(5, L) * 4
       shapes.push(...prism(cx, cy, w, h, stone[0], stone[1], stone[2]))
       let base = cy - h, ww = w
       if (L >= 3) {

@@ -1,5 +1,5 @@
 // Client mirror of the server's building rules, used only to explain why a button is disabled.
-import type { BuildingDef, CityBuilding, City, Player } from '../types'
+import type { BuildingDef, CityBuilding, City, Defense, Player } from '../types'
 
 export function placeBlock(def: BuildingDef, city: City, player: Player, builders: number): string {
   const spec = def.levels[0]
@@ -36,4 +36,14 @@ export function specLines(type: string, s: { hp: number; dps?: number; capacity?
   if (s.builders) out.push(`+${s.builders} строитель`)
   if (type === 'townhall') out.push('Открывает здания и уровни')
   return out
+}
+
+/** defenseLine: a city's defences in one line; traps appear only where the server shows them (after a battle). */
+export function defenseLine(d: Defense): string {
+  const out = [`башни ${d.towers}`]
+  if (d.mortars) out.push(`мортиры ${d.mortars}`)
+  if (d.crossbows) out.push(`арбалеты ${d.crossbows}`)
+  out.push(`стены ${d.walls}`)
+  if (d.traps) out.push(`ловушки ${d.traps}`)
+  return out.join(' · ')
 }

@@ -31,7 +31,7 @@ onUnmounted(() => { unmounted = true; stage.value?.dispose() })
 
 defineExpose({
   start: (squad: Record<string, number>, shown: Record<string, number>) => layer.value?.start(squad, shown),
-  round: (target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx?: { mortar: boolean; trap: boolean }) => layer.value?.round(target, ruined, alive, dur, fx),
+  round: (target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx?: { mortar: boolean; trap: boolean; crossbow?: boolean }) => layer.value?.round(target, ruined, alive, dur, fx),
   cheer: () => layer.value?.cheer(),
   clear: () => layer.value?.clear(),
 })
