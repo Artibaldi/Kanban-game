@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// Original troop portraits: Страж (balanced), Налётчик (high attack), Таран (siege).
+// Original troop portraits: Страж (balanced), Налётчик (high attack), Лучник (ranged), Таран (siege).
 withDefaults(defineProps<{ type: string; size?: number; faded?: boolean }>(), { size: 48 })
 </script>
 
 <template>
   <svg :width="size" :height="size" viewBox="0 0 48 48" aria-hidden="true" :opacity="faded ? 0.35 : 1" class="troop">
-    <circle cx="24" cy="24" r="23" :fill="type === 'guard' ? '#dcebd9' : type === 'raider' ? '#f4dcd6' : '#efe2cf'" />
+    <circle cx="24" cy="24" r="23" :fill="type === 'guard' ? '#dcebd9' : type === 'raider' ? '#f4dcd6' : type === 'archer' ? '#e2efd2' : '#efe2cf'" />
     <g v-if="type === 'guard'">
       <path d="M14 44c0-9 4-14 10-14s10 5 10 14z" fill="#3f7a55" />
       <circle cx="24" cy="22" r="7" fill="#e9c7a4" />
@@ -18,6 +18,13 @@ withDefaults(defineProps<{ type: string; size?: number; faded?: boolean }>(), { 
       <path d="M16 21c1-7 15-7 16 0l-2-6h-12z" fill="#4a3526" /><rect x="17" y="20" width="14" height="3" fill="#2d2d2d" opacity="0.8" />
       <path d="M8 38 18 26" stroke="#c9ced3" stroke-width="2.4" stroke-linecap="round" /><path d="M40 38 30 26" stroke="#c9ced3" stroke-width="2.4" stroke-linecap="round" />
       <path d="M9 34l4 3M39 34l-4 3" stroke="#7c5528" stroke-width="2" />
+    </g>
+    <g v-else-if="type === 'archer'">
+      <path d="M14 44c0-9 4-14 10-14s10 5 10 14z" fill="#4f9a3a" />
+      <circle cx="24" cy="22" r="7" fill="#e9c7a4" />
+      <path d="M15 22c0-9 18-9 18 0l-3-3c-2-5-10-5-12 0z" fill="#356e27" />
+      <path d="M36 14c6 6 6 18 0 24" fill="none" stroke="#a8783f" stroke-width="2.4" stroke-linecap="round" /><path d="M36 14v24" stroke="#eeeeee" stroke-width="0.8" />
+      <path d="M28 26h12" stroke="#7c5528" stroke-width="1.6" /><path d="M40 26l-3-2v4z" fill="#c9ced3" />
     </g>
     <g v-else>
       <rect x="8" y="20" width="28" height="9" rx="4" fill="#a8783f" stroke="#7c5528" stroke-width="1.2" />

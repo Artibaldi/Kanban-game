@@ -178,15 +178,15 @@ func (s *Server) friendlyBattle(w http.ResponseWriter, r *http.Request) {
 func battleDTO(ctx context.Context, q dbtx, a actor, id string) (map[string]any, error) {
 	var kind, att, def, attName, defName string
 	var seed int64
-	var army, losses, defense, rounds []byte
+	var army, losses, defense, rounds, levels []byte
 	var destruction, stars, at, dt int
 	var gold, xp int64
 	var created time.Time
 	var challenge *string
 	err := q.QueryRow(ctx, `SELECT b.challenge_id::text, b.kind,b.attacker_id::text,b.defender_id::text,ua.display_name,ud.display_name,b.seed,b.army,b.losses,b.defense,b.rounds,
- b.destruction,b.stars,b.gold_reward,b.xp_reward,b.attacker_trophies,b.defender_trophies,b.created_at
+ b.destruction,b.stars,b.gold_reward,b.xp_reward,b.attacker_trophies,b.defender_trophies,b.created_at,b.troop_levels
  FROM battles b JOIN users ua ON ua.id=b.attacker_id JOIN users ud ON ud.id=b.defender_id WHERE b.id=$1`, id).
-		Scan(&challenge, &kind, &att, &def, &attName, &defName, &seed, &army, &losses, &defense, &rounds, &destruction, &stars, &gold, &xp, &at, &dt, &created)
+		Scan(&challenge, &kind, &att, &def, &attName, &defName, &seed, &army, &losses, &defense, &rounds, &destruction, &stars, &gold, &xp, &at, &dt, &created, &levels)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func battleDTO(ctx context.Context, q dbtx, a actor, id string) (map[string]any,
 	}
 	return map[string]any{"id": id, "kind": kind, "attacker_id": att, "defender_id": def, "attacker": attName, "defender": defName, "seed": seed,
 		"army": json.RawMessage(army), "losses": json.RawMessage(losses), "defense": json.RawMessage(defense), "rounds": json.RawMessage(rounds),
-		"destruction": destruction, "stars": stars, "gold": gold, "xp": xp, "attacker_trophies": at, "defender_trophies": dt, "created_at": created, "challenge_id": challenge}, nil
+		"destruction": destruction, "stars": stars, "gold": gold, "xp": xp, "attacker_trophies": at, "defender_trophies": dt, "created_at": created, "challenge_id": challenge, "troop_levels": json.RawMessage(levels)}, nil
 }
 
 func (s *Server) getBattle(w http.ResponseWriter, r *http.Request) {

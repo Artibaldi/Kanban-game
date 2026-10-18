@@ -10,7 +10,10 @@ func TestWorkshopArchersAndHiddenTraps(t *testing.T) {
 	alexey, maria := login(t, ts, "alexey"), login(t, ts, "maria")
 	ctx := context.Background()
 
-	// Archers need an archery range.
+	// Archers need an archery range; the army says so before anyone tries.
+	if l := alexey.must(200, "GET", "/army", nil, "").Body["locked"].(map[string]any); l["archer"] == nil || l["guard"] != nil {
+		t.Fatalf("locked: %v", l)
+	}
 	alexey.refused("no_archery", "POST", "/army/train", map[string]any{"type": "archer", "count": 2})
 	alexey.refused("no_workshop", "POST", "/army/research", map[string]any{"type": "guard"})
 	if _, err := pool.Exec(ctx, `INSERT INTO buildings(user_id,type,level,x,y) SELECT id,'archery',1,1,1 FROM users WHERE login='alexey'

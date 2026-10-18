@@ -58,23 +58,23 @@ const hp = computed(() => {
   if (!d) return []
   return [
     { key: 'wall', name: 'Стены', max: d.wall_hp, now: r ? r.wall_hp : d.wall_hp },
-    { key: 'tower', name: 'Башни', max: d.tower_hp, now: r ? r.tower_hp : d.tower_hp },
+    { key: 'tower', name: d.mortars ? 'Башни и мортиры' : 'Башни', max: d.tower_hp, now: r ? r.tower_hp : d.tower_hp },
     { key: 'townhall', name: 'Ратуша', max: d.townhall_hp, now: r ? r.townhall_hp : d.townhall_hp },
-    { key: 'other', name: 'Казармы и хранилища', max: d.other_hp, now: r ? r.other_hp : d.other_hp },
+    { key: 'other', name: 'Остальные здания', max: d.other_hp, now: r ? r.other_hp : d.other_hp },
   ].filter(h => h.max > 0)
 })
 // The flat fallback greys out ruined buildings the old way.
 const ruinedTypes = computed<BuildingType[]>(() => {
   if (!start.value) return []
   const out: BuildingType[] = []
-  for (const p of ruinedAt(start.value, stateAt(step.value), eventsUpTo(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage'] as BuildingType[]) : [p as BuildingType]))
+  for (const p of ruinedAt(start.value, stateAt(step.value), eventsUpTo(step.value))) out.push(...(p === 'other' ? (['barracks', 'storage', 'tavern', 'hut', 'market', 'well', 'archery', 'workshop'] as BuildingType[]) : p === 'tower' ? (['tower', 'mortar'] as BuildingType[]) : [p as BuildingType]))
   return out
 })
 
 function beat(i: number, dur: number) {
   const r = stateAt(i), round = b.value!.rounds[i - 1]
   const figs = Object.fromEntries(Object.entries(b.value!.army).map(([k, n]) => [k, aliveShown(round.alive[k] ?? 0, n, shown.value[k])]))
-  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000)
+  scene.value?.round(targetOf(stateAt(i - 1), r), ruinedAt(start.value!, r, eventsUpTo(i)), figs, dur / 1000, { mortar: !!round.mortar_damage, trap: round.events.includes('trap_sprung') })
 }
 function play() {
   if (!b.value) return
@@ -122,12 +122,14 @@ function onReady() {
   else finish()
 }
 
-const eventText: Record<string, string> = { wall_breached: 'Стены пробиты', towers_down: 'Башни разрушены', townhall_down: 'Ратуша пала' }
+const eventText: Record<string, string> = { wall_breached: 'Стены пробиты', towers_down: 'Башни разрушены', townhall_down: 'Ратуша пала', trap_sprung: 'Сработали ловушки' }
 function roundText(r: Battle['rounds'][number]) {
   // In a friendly duel nobody dies: they are out of this battle and come back home.
   const fell = friendly.value ? 'выбыли из боя' : 'погибли'
   const killed = Object.entries(r.killed).filter(([, n]) => n > 0).map(([k, n]) => `${game.troop(k)?.name || k} × ${n}`).join(', ')
   const parts = [`Башни нанесли ${r.tower_damage} урона${killed ? ` — ${fell}: ${killed}` : ''}.`]
+  if (r.mortar_damage) parts.push(`Мортиры: ${r.mortar_damage} урона по площади.`)
+  if (r.trap_damage) parts.push(`Ловушки: ${r.trap_damage} урона.`)
   if (r.wall_damage) parts.push(`Урон стенам: ${r.wall_damage}.`)
   if (r.tower_hit) parts.push(`Урон башням: ${r.tower_hit}.`)
   if (r.base_damage) parts.push(`Урон зданиям: ${r.base_damage}.`)

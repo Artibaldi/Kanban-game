@@ -7,7 +7,7 @@ import { animateTroop, troopModel } from './troops'
 import { WOOD, WOOD_D } from './fortressWorld'
 
 const ELEV = 0.62, YAW = Math.PI / 4
-const ORDER = ['guard', 'raider', 'ram']
+const ORDER = ['guard', 'raider', 'archer', 'ram']
 const MAX_SHOWN = 12
 
 interface Soldier { type: string; g: THREE.Group; ph: number; walk?: { from: THREE.Vector3; to: THREE.Vector3; t: number } }

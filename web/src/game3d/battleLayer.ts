@@ -9,7 +9,7 @@ import type { CityStage } from './cityStage'
 import { animateTroop, troopModel } from './troops'
 
 // Decor is not part of a defence: it is never a target and never in ruins.
-const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other' }
+const partOf: Partial<Record<BuildingType, Part>> = { wall: 'wall', tower: 'tower', townhall: 'townhall', barracks: 'other', storage: 'other', tavern: 'other', hut: 'other', market: 'other', well: 'other', archery: 'other', workshop: 'other', mortar: 'tower' }
 
 interface Fig { type: string; g: THREE.Group; ph: number; alive: boolean; target: string | null; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number }
 interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; sy: number }
@@ -17,7 +17,8 @@ interface Ruin { id: string; mats: [THREE.Mesh, THREE.Material][]; rot: number; 
 export class BattleLayer {
   private figs: Fig[] = []
   private ruins = new Map<string, Ruin>()
-  private shots: { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number }[] = []
+  /** Projectiles in flight: tower bolts, arrows and mortar shells; `arc` is the height of the curve. */
+  private shots: { m: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; arc: number; boom?: boolean }[] = []
   private smokeT = 0
   private puffs: { m: THREE.Mesh; life: number }[] = []
   private target: Part | null = null
@@ -52,9 +53,9 @@ export class BattleLayer {
 
   /**
    * round: one beat. `target` is the part this round hit, `ruined` what lies in ruins after it,
-   * `alive` how many figures of each type still stand.
+   * `alive` how many figures of each type still stand; `fx` says whether mortars fired and traps sprang this round.
    */
-  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number) {
+  round(target: Part | null, ruined: Set<Part>, alive: Record<string, number>, dur: number, fx: { mortar: boolean; trap: boolean } = { mortar: false, trap: false }) {
     this.target = target
     this.entries = null
     const k = this.city.toolkit
@@ -73,15 +74,18 @@ export class BattleLayer {
     for (const e of this.city.entries()) { const p = partOf[e.type]; if (p && ruined.has(p) && !this.ruins.has(e.id)) this.ruin(e) }
     // Advance: each standing figure heads for the nearest standing building of the target part.
     const targets = this.city.entries().filter(e => target && partOf[e.type] === target && !this.ruins.has(e.id))
+    // Archers shoot over the walls: while the others break them, they aim at what stands behind.
+    const behind = this.city.entries().filter(e => { const p = partOf[e.type]; return p && p !== 'wall' && !this.ruins.has(e.id) })
     for (const f of this.figs) {
       if (!f.alive) continue
+      const pool = f.type === 'archer' && target === 'wall' ? behind : targets
       let best: (typeof targets)[number] | null = null, bd = Infinity
-      for (const e of targets) { const d = e.holder.position.distanceTo(f.g.position); if (d < bd) { bd = d; best = e } }
+      for (const e of pool) { const d = e.holder.position.distanceTo(f.g.position); if (d < bd) { bd = d; best = e } }
       f.target = best?.id ?? null
       f.from = f.g.position.clone()
       if (best) {
         const dir = f.g.position.clone().sub(best.holder.position).setY(0)
-        const stand = best.holder.position.clone().add(dir.setLength(best.type === 'wall' ? 0.95 : 1.35)).setY(0.21)
+        const stand = best.holder.position.clone().add(dir.setLength(f.type === 'archer' ? 3.2 : best.type === 'wall' ? 0.95 : 1.35)).setY(0.21)
         stand.x += (rand() - 0.5) * 0.5; stand.z += (rand() - 0.5) * 0.5
         f.to = stand
       } else f.to = f.g.position.clone()
@@ -95,7 +99,32 @@ export class BattleLayer {
       const f = living[Math.floor(rand() * living.length)]
       const from = t.holder.position.clone().setY(t.height + 0.3)
       const m = k.mk(k.sph(0.13, 8, 6), k.MB(0xffe14a), from.x, from.y, from.z, this.city.group)
-      this.shots.push({ m, from, to: f.g.position.clone().setY(0.6), t: -n * 0.35 - rand() * 0.2 })
+      this.shots.push({ m, from, to: f.g.position.clone().setY(0.6), t: -n * 0.35 - rand() * 0.2, arc: 1.6 })
+    }
+    // Arrows: each archer looses one at its target once it has taken its place.
+    for (const f of living) {
+      if (f.type !== 'archer' || !f.target) continue
+      const e = this.city.entries().find(x => x.id === f.target)
+      if (!e) continue
+      const from = f.to.clone().setY(0.8), m = k.mk(k.rb(0.04, 0.04, 0.4, 0.01), k.MB(0x8a5a2b), from.x, from.y, from.z, this.city.group)
+      this.shots.push({ m, from, to: e.holder.position.clone().setY(Math.min(1.4, e.height * 0.6)), t: -(dur * 0.6) / 0.55 - rand() * 0.3, arc: 0.7 })
+    }
+    // Mortar shells: high, slow and heavy; they burst among the squad.
+    if (fx.mortar) for (const mo of this.city.entries().filter(e => e.type === 'mortar' && !this.ruins.has(e.id))) for (let n = 0; n < 2 && living.length; n++) {
+      const f = living[Math.floor(rand() * living.length)]
+      const from = mo.holder.position.clone().setY(1.0)
+      const m = k.mk(k.sph(0.2, 10, 8), k.MB(0x2e2e36), from.x, from.y, from.z, this.city.group)
+      this.shots.push({ m, from, to: f.g.position.clone().setY(0.3), t: -0.2 - n * 0.5, arc: 3.2, boom: true })
+    }
+    // Traps spring under the front of the squad: spikes shoot up and sink back.
+    if (fx.trap) for (const f of living.slice(0, 3)) {
+      const p = f.g.position.clone(), spikes = k.grp(this.city.group, p.x, 0.05, p.z)
+      for (let i = 0; i < 5; i++) k.mk(k.cone(0.07, 0.45, 5), k.M(0xc9d2de), (rand() - 0.5) * 0.6, 0.2, (rand() - 0.5) * 0.6, spikes)
+      spikes.scale.y = 0.01
+      k.tween(0.18, q => { spikes.scale.y = 0.01 + eOut(q) }, () => {
+        k.sparks(this.city.group, p.clone().setY(0.4), 6, 0xffffff, 2)
+        k.wait(0.5, () => k.tween(0.3, q => { spikes.scale.y = 1 - q }, () => this.city.group.remove(spikes), 'duel'), 'duel')
+      }, 'duel')
     }
   }
 
@@ -140,9 +169,16 @@ export class BattleLayer {
       if (s.t < 0) { s.m.visible = false; continue }
       s.m.visible = true
       const q = Math.min(1, s.t)
+      const prev = s.m.position.clone()
       s.m.position.lerpVectors(s.from, s.to, q)
-      s.m.position.y += Math.sin(q * Math.PI) * 1.6
-      if (q >= 1) { k.sparks(this.city.group, s.m.position, 4, 0xffe27a, 2); this.city.group.remove(s.m); this.shots.splice(i, 1) }
+      s.m.position.y += Math.sin(q * Math.PI) * s.arc
+      if (s.arc < 1) s.m.lookAt(s.m.position.clone().add(s.m.position.clone().sub(prev)))
+      if (q >= 1) {
+        if (s.boom) { k.poof(this.city.group, s.m.position.clone().setY(0.4), 1.0, 6); k.debris(this.city.group, s.m.position.clone().setY(0.4), 4) }
+        else k.sparks(this.city.group, s.m.position, 4, 0xffe27a, 2)
+        this.city.group.remove(s.m)
+        this.shots.splice(i, 1)
+      }
     }
     // Smoke rises from the ruins.
     this.smokeT += dt

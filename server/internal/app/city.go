@@ -335,7 +335,14 @@ func armyDTO(ctx context.Context, q dbtx, userID string) (map[string]any, error)
 	if research != nil {
 		res = research
 	}
-	return map[string]any{"troops": troops, "queue": queue, "player": p, "server_time": time.Now(),
+	// Why a troop type cannot be trained yet, for the cards.
+	locked := map[string]string{}
+	for _, k := range game.TroopOrder {
+		if rf := game.CanTrain(c, k); rf != nil {
+			locked[k] = rf.Message
+		}
+	}
+	return map[string]any{"troops": troops, "queue": queue, "player": p, "server_time": time.Now(), "locked": locked,
 		"levels": levels, "research": res, "max_troop_level": game.MaxTroopLevel(c), "research_costs": game.Research}, nil
 }
 

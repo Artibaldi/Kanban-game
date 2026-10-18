@@ -1,4 +1,5 @@
-// The player's troops: Страж (shield and spear), Налётчик (two blades, red hood), Таран (iron-headed ram on wheels).
+// The player's troops: Страж (shield and spear), Налётчик (two blades, red hood), Лучник (green hood, longbow),
+// Таран (iron-headed ram on wheels).
 // Same toy style as the horde, but in the team's blue and gold so friend and foe never look alike.
 import * as THREE from 'three'
 import { Kit, rand } from './kit'
@@ -69,6 +70,33 @@ function raider(k: Kit) {
   return g
 }
 
+function archer(k: Kit) {
+  const g = new THREE.Group(), rig = k.grp(g)
+  const GREEN = 0x4f9a3a, GREEN_D = 0x356e27
+  for (const s of [-1, 1]) k.mk(k.caps(0.08, 0.16), k.M(0x5a3f22), s * 0.12, 0.15, 0, rig)
+  k.mk(k.rb(0.44, 0.46, 0.32, 0.14), k.M(GREEN), 0, 0.52, 0, rig)
+  k.mk(k.rb(0.48, 0.07, 0.36, 0.03), k.M(WOOD_D), 0, 0.34, 0, rig)
+  k.mk(k.rb(0.1, 0.1, 0.05, 0.02), k.M(GOLD), 0, 0.34, 0.19, rig)
+  // Quiver on the back with fletched arrows.
+  const q = k.grp(rig, 0.1, 0.62, -0.22)
+  q.rotation.z = -0.3
+  k.mk(k.cyl(0.08, 0.07, 0.42, 8), k.M(0x8a5a2b), 0, 0, 0, q)
+  for (const x of [-0.03, 0.03]) k.mk(k.cone(0.04, 0.08, 4), k.M(0xf2f2f2), x, 0.26, 0, q)
+  const head = k.grp(rig, 0, 0.94, 0)
+  k.mk(k.sph(0.24), k.M(SKIN), 0, 0, 0, head)
+  k.mk(k.sph(0.27, 14, 10), k.M(GREEN_D), 0, 0.06, -0.05, head).scale.set(1, 0.95, 1.05)
+  k.mk(k.cone(0.12, 0.3, 8), k.M(GREEN_D), 0, 0.14, -0.28, head).rotation.x = -1.2
+  const ey = eyes(k, head, 0.08, 0.02, 0.2, 0.06)
+  // The bow in the left hand, the drawing arm on the right.
+  const bow = k.grp(rig, -0.34, 0.62, 0.16)
+  k.mk(k.geo('bow', () => new THREE.TorusGeometry(0.42, 0.025, 6, 16, Math.PI)), k.M(WOOD), 0, 0, 0, bow).rotation.z = -Math.PI / 2
+  k.mk(k.cyl(0.006, 0.006, 0.84, 4), k.MB(0xeeeeee), 0, 0, 0, bow).userData.noOL = 1
+  const arm = k.grp(rig, 0.3, 0.6, 0.1)
+  k.mk(k.rb(0.08, 0.26, 0.08, 0.03), k.M(GREEN), 0, 0.1, 0, arm)
+  g.userData = { rig, head, eyes: ey, arms: [arm], h: 1.3 } satisfies Rig
+  return g
+}
+
 function ram(k: Kit) {
   const g = new THREE.Group(), rig = k.grp(g)
   // A covered frame on four wheels with a swinging iron-headed log.
@@ -96,8 +124,8 @@ function ram(k: Kit) {
   return g
 }
 
-export type TroopType = 'guard' | 'raider' | 'ram'
-const builders: Record<TroopType, (k: Kit) => THREE.Group> = { guard, raider, ram }
+export type TroopType = 'guard' | 'raider' | 'archer' | 'ram'
+const builders: Record<TroopType, (k: Kit) => THREE.Group> = { guard, raider, archer, ram }
 
 /** troopModel: one soldier with its outline; unknown types become guards. */
 export function troopModel(k: Kit, type: string): THREE.Group {

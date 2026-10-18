@@ -24,12 +24,14 @@ export function upgradeBlock(b: CityBuilding, city: City, player: Player, builde
   return ''
 }
 
-export function specLines(type: string, s: { hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number }) {
-  const out = [`Прочность ${s.hp}`]
+export function specLines(type: string, s: { hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number }) {
+  const out = s.hp ? [`Прочность ${s.hp}`] : []
   if (s.dps) out.push(`Урон ${s.dps} за залп`)
   if (s.capacity) out.push(`Мест в армии ${s.capacity}`)
   if (s.gold_cap) out.push(`+${s.gold_cap} к запасу золота`)
   if (s.energy_cap) out.push(`+${s.energy_cap} к запасу энергии`)
+  if (s.splash) out.push(`Урон по площади ${s.splash} каждому, до 6 бойцов`)
+  if (s.trap_dmg) out.push(`Урон при срабатывании ${s.trap_dmg}`)
   if (s.fee_pct) out.push(`Комиссия обмена ${s.fee_pct}%`)
   if (s.builders) out.push(`+${s.builders} строитель`)
   if (type === 'townhall') out.push('Открывает здания и уровни')
