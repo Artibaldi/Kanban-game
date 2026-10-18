@@ -65,6 +65,9 @@ const art = computed(() => {
       extra.push({ kind: 'spears', x: cx + w * 0.5, y: cy - h * 0.2 })
       break
     }
+    case 'hut': shapes.push(...prism(cx, cy, 16, 12, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 16, 12, 10, v('gold'), v('gold-dark'))); topY = cy - 34; break
+    case 'market': shapes.push(...prism(cx, cy, 20, 9, v('wood-light'), v('wood'), v('wood-dark')), ...roof(cx, cy, 20, 9, 7, '#e05a4a', '#b23a2e')); topY = cy - 34; break
+    case 'well': shapes.push(...prism(cx, cy, 18, 7, v('stone-light'), v('stone'), v('stone-dark')), ...prism(cx, cy - 7, 6, 16, '#c4b2ff', '#9c84ff', '#7a5cff')); topY = cy - 26; break
     // Decor in the flat view: small and simple.
     case 'road': shapes.push(...prism(cx, cy, 26, 2, v('stone-light'), v('stone'), v('stone-dark'))); topY = cy - 4; break
     case 'pond': shapes.push(...prism(cx, cy, 24, 3, '#4db4f0', v('stone'), v('stone-dark'))); topY = cy - 5; break

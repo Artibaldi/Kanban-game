@@ -27,7 +27,9 @@ type LevelSpec struct {
 	DPS           int   `json:"dps,omitempty"`        // tower damage per round
 	Capacity      int   `json:"capacity,omitempty"`   // barracks housing
 	GoldCap       int64 `json:"gold_cap,omitempty"`   // storage
-	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage
+	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage, crystal well
+	FeePct        int   `json:"fee_pct,omitempty"`    // market: the share kept on every exchange
+	Builders      int   `json:"builders,omitempty"`   // builder hut
 }
 
 type BuildingDef struct {
@@ -64,7 +66,7 @@ func (d BuildingDef) Allowed(thLevel int) int {
 }
 
 // BuildingOrder is the order buildings are offered in the city.
-var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "road", "tree", "flowers", "lantern", "pond"}
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "road", "tree", "flowers", "lantern", "pond"}
 
 // Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
 // 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
@@ -138,6 +140,30 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 560},
 		},
 	},
+	// Economy: none of these earns anything by itself — gold and energy still come only from work and wave chests.
+	"hut": {
+		Type: "hut", Name: "Хижина строителя", Description: "Здесь живёт ещё один строитель: можно вести на одну стройку больше.",
+		MaxCount: []int{0, 0, 1, 1, 2},
+		Levels:   []LevelSpec{{Level: 1, Cost: 600, Seconds: 25, RequiresTH: 3, HP: 300, Builders: 1}},
+	},
+	"market": {
+		Type: "market", Name: "Рынок", Description: "Обмен золота на энергию и обратно. Рынок берёт комиссию, уровень её снижает.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 300, Seconds: 15, RequiresTH: 2, HP: 400, FeePct: 30},
+			{Level: 2, Cost: 700, Seconds: 25, RequiresTH: 3, HP: 550, FeePct: 20},
+			{Level: 3, Cost: 1400, Seconds: 40, RequiresTH: 4, HP: 700, FeePct: 10},
+		},
+	},
+	"well": {
+		Type: "well", Name: "Кристальный колодец", Description: "Отдельный запас энергии: хранит её, но не добывает.",
+		MaxCount: []int{0, 1, 1, 2, 2},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 200, Seconds: 12, RequiresTH: 2, HP: 300, EnergyCap: 250},
+			{Level: 2, Cost: 500, Seconds: 25, RequiresTH: 3, HP: 420, EnergyCap: 500},
+			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 560, EnergyCap: 900},
+		},
+	},
 	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.
 	"road":    decor("road", "Дорога", "Мостовая между зданиями. Укладывается цепочкой.", 5, []int{40, 60, 80, 100, 120}),
 	"tree":    decor("tree", "Дерево", "Тень и зелень во дворе.", 15, []int{6, 10, 14, 18, 22}),
@@ -197,6 +223,17 @@ func (c City) Count(kind string) int {
 	return n
 }
 
+// Builders: the two the town hall provides plus one for every finished builder hut.
+func (c City) Builders() int {
+	n := MaxBuilders
+	for _, b := range c.Buildings {
+		if spec, ok := Buildings[b.Type].Spec(b.Level); ok {
+			n += spec.Builders
+		}
+	}
+	return n
+}
+
 func (c City) BuildersBusy() int {
 	n := 0
 	for _, b := range c.Buildings {
@@ -216,14 +253,14 @@ func (c City) Occupied(x, y int) bool {
 	return false
 }
 
-// Caps are the storage limits: town hall base plus every completed storage level.
+// Caps are the storage limits: town hall base plus every completed storage and crystal well level.
 func (c City) Caps() (gold, energy int64) {
 	gold, energy = BaseGoldCap, BaseEnergyCap
 	for _, b := range c.Buildings {
-		if b.Type != "storage" {
+		if b.Type != "storage" && b.Type != "well" {
 			continue
 		}
-		if spec, ok := Buildings["storage"].Spec(b.Level); ok {
+		if spec, ok := Buildings[b.Type].Spec(b.Level); ok {
 			gold += spec.GoldCap
 			energy += spec.EnergyCap
 		}
@@ -275,7 +312,7 @@ func CheckPlace(c City, kind string, x, y int, gold int64) (LevelSpec, *Refusal)
 	if c.Count(kind) >= def.Allowed(th) {
 		return LevelSpec{}, refuse("building_limit", "Достигнут лимит таких зданий для текущего уровня ратуши.")
 	}
-	if !def.Decor && c.BuildersBusy() >= MaxBuilders {
+	if !def.Decor && c.BuildersBusy() >= c.Builders() {
 		return LevelSpec{}, refuse("builders_busy", "Все строители заняты. Дождитесь окончания стройки.")
 	}
 	if gold < spec.Cost {
@@ -301,7 +338,7 @@ func CheckUpgrade(c City, b Building, gold int64, playerLevel int) (LevelSpec, *
 	if playerLevel < spec.RequiresLevel {
 		return LevelSpec{}, refuse("player_level", fmt.Sprintf("Нужен уровень игрока %d. Опыт дают подтверждённые задачи.", spec.RequiresLevel))
 	}
-	if c.BuildersBusy() >= MaxBuilders {
+	if c.BuildersBusy() >= c.Builders() {
 		return LevelSpec{}, refuse("builders_busy", "Все строители заняты. Дождитесь окончания стройки.")
 	}
 	if gold < spec.Cost {

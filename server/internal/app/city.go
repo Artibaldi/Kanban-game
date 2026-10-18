@@ -465,3 +465,44 @@ func (s *Server) removeDecor(w http.ResponseWriter, r *http.Request) {
 		return 200, out, err
 	})
 }
+
+// marketTrade: one exchange at the market. Nothing is earned here — the market only turns one resource into the
+// other at the work-reward rate, minus its fee.
+func (s *Server) marketTrade(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.authed(w, r)
+	if !ok {
+		return
+	}
+	s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, raw []byte) (int, any, error) {
+		var in struct {
+			Give   string `json:"give"`
+			Amount int64  `json:"amount"`
+		}
+		if err := decodeInto(raw, &in); err != nil {
+			return 0, nil, err
+		}
+		b, c, st, err := gameTx(ctx, tx, a)
+		if err != nil {
+			return 0, nil, err
+		}
+		if err = debtRefusal(b); err != nil {
+			return 0, nil, err
+		}
+		dGold, dEnergy, rf := game.Exchange(st, c, in.Give, in.Amount)
+		if rf == nil {
+			rf = game.TradeFits(c, b.Gold, b.Energy, dGold, dEnergy)
+		}
+		if rf != nil {
+			return 0, nil, asAPI(rf)
+		}
+		note := fmt.Sprintf("Рынок: %d золота → %d энергии", -dGold, dEnergy)
+		if in.Give == "energy" {
+			note = fmt.Sprintf("Рынок: %d энергии → %d золота", -dEnergy, dGold)
+		}
+		if _, err = applyLedger(ctx, tx, ledgerEntry{UserID: a.ID, Kind: "market", Gold: dGold, Energy: dEnergy, ActorID: a.ID, Note: note}); err != nil {
+			return 0, nil, err
+		}
+		out, err := playerState(ctx, tx, a.ID)
+		return 200, out, err
+	})
+}
