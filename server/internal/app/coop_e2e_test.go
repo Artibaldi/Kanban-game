@@ -141,6 +141,19 @@ func TestSettleWaveRewardsWholeTeam(t *testing.T) {
 	if n != 4 {
 		t.Fatalf("every member incl. lead and work-mode maria gets the chest: %d", n)
 	}
+	// The chest ceremony shows exactly what this member was paid, read back from the ledger.
+	var paid int64
+	_ = pool.QueryRow(ctx, `SELECT l.gold FROM ledger l JOIN users u ON u.id=l.user_id WHERE l.kind='wave_reward' AND u.login='irina' ORDER BY l.id DESC LIMIT 1`).Scan(&paid)
+	w0 := items(irina.must(200, "GET", "/waves", nil, ""))[0]
+	chest, _ := w0["chest"].(map[string]any)
+	if chest == nil || int64(num(chest["gold"])) != paid || num(chest["energy"]) <= 0 {
+		t.Fatalf("chest from the ledger: paid %d, got %v", paid, w0)
+	}
+	// Seeded past waves were never paid: no chest to show.
+	ws := items(irina.must(200, "GET", "/waves", nil, ""))
+	if c := ws[len(ws)-1]["chest"]; c != nil {
+		t.Fatalf("an unpaid wave has no chest: %v", ws[len(ws)-1])
+	}
 	var next int
 	_ = pool.QueryRow(ctx, `SELECT count(*) FROM waves WHERE settled_at IS NULL AND starts_at<=now() AND ends_at>now() AND team_id=(SELECT id FROM teams WHERE name='Платформа')`).Scan(&next)
 	if next != 1 {
@@ -268,6 +281,30 @@ func TestFortressAPI(t *testing.T) {
 	if !overdue {
 		t.Fatal("PLT-10 is overdue in the seed")
 	}
+	// The panel needs the stage and whether the task is the viewer's own (to offer «Подтвердить»), never whose it is.
+	mine := 0
+	for _, e := range enemies {
+		m := e.(map[string]any)
+		st, _ := m["state"].(string)
+		if st != "ready" && st != "in_progress" && st != "review" {
+			t.Fatalf("enemy state: %v", m)
+		}
+		if v, ok := m["mine"].(bool); !ok {
+			t.Fatalf("mine flag: %v", m)
+		} else if v {
+			mine++
+		}
+	}
+	irina := login(t, ts, "irina").must(200, "GET", "/fortress", nil, "").Body["enemies"].([]any)
+	irinaMine := 0
+	for _, e := range irina {
+		if e.(map[string]any)["mine"] == true {
+			irinaMine++
+		}
+	}
+	if mine == 0 || mine == len(enemies) || irinaMine == mine {
+		t.Fatalf("mine is per viewer: alexey %d of %d, irina %d", mine, len(enemies), irinaMine)
+	}
 	if num(f["wave"].(map[string]any)["planned"]) == 0 || num(f["fog"]) == 0 {
 		t.Fatalf("plan snapshot and fog exist: %v", f["wave"])
 	}
@@ -322,8 +359,9 @@ func TestAdminTeamsAndSeed(t *testing.T) {
 	}
 	alexey := login(t, ts, "alexey")
 	alexey.refused("forbidden", "PATCH", "/admin/teams/"+id, map[string]any{"wave_weeks": 1})
-	if n := len(items(alexey.must(200, "GET", "/waves", nil, ""))); n < 3 {
-		t.Fatalf("seeded past waves: %d", n)
+	ws := items(alexey.must(200, "GET", "/waves", nil, ""))
+	if len(ws) < 3 {
+		t.Fatalf("seeded past waves: %d", len(ws))
 	}
 	var hp int
 	_ = pool.QueryRow(context.Background(), `SELECT hp FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp)

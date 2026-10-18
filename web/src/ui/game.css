@@ -1,0 +1,97 @@
+/* Game chrome in the spirit of mobile strategy games: thick ink outlines, bevelled buttons, stroked display type.
+   Used only on game screens; the work layer never loads these looks. Original art: no third-party assets. */
+:root {
+  --g-ink: #1e1e1e;
+  --g-gold: #ffd323;
+  --g-blue: #3e8ef0;
+  --g-red: #f04848;
+  --g-panel: #f5e7c6;
+  --g-panel-b: #6b4626;
+  --g-night: rgba(24, 30, 72, 0.92);
+  --g-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Stroked display text. */
+.g-stroke { font-family: var(--font-game); font-weight: 900; color: #fff; -webkit-text-stroke: 3px var(--g-ink); paint-order: stroke fill; text-shadow: 0 3px 0 var(--g-ink); letter-spacing: 0.01em; }
+.g-stroke.s2 { -webkit-text-stroke: 2px var(--g-ink); text-shadow: 0 2px 0 var(--g-ink); }
+
+/* Bevelled buttons: green (go), yellow (reward), blue (neutral), red (close). */
+.g-btn { appearance: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 2px solid var(--g-ink); border-radius: 14px; padding: 11px 20px; margin-bottom: 8px; font: 900 18px var(--font-game); color: #fff; white-space: nowrap; text-decoration: none;
+  background: linear-gradient(#9bea5a, #5cc02e 55%, #4caf22); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(0, 0, 0, 0.12), 0 6px 0 #2e7a12, 0 6px 0 2px var(--g-ink); transition: transform 180ms var(--g-pop); }
+.g-btn > span { -webkit-text-stroke: 2.5px var(--g-ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--g-ink); }
+.g-btn.yellow { background: linear-gradient(#ffea7a, #ffd323 55%, #f2b400); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.7), inset 0 -3px 0 rgba(0, 0, 0, 0.1), 0 6px 0 #b57100, 0 6px 0 2px var(--g-ink); }
+.g-btn.blue { background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -3px 0 rgba(0, 0, 0, 0.12), 0 6px 0 #1d4f9a, 0 6px 0 2px var(--g-ink); }
+.g-btn.red { background: linear-gradient(#ff8a7a, #f04848 55%, #cf2f33); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.45), 0 6px 0 #8c1e22, 0 6px 0 2px var(--g-ink); }
+.g-btn.small { padding: 7px 13px; font-size: 15px; border-radius: 12px; }
+.g-btn.big { padding: 15px 32px; font-size: 22px; border-radius: 18px; }
+.g-btn.on { background: linear-gradient(#ffea7a, #ffd323 55%, #f2b400); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.7), 0 6px 0 #b57100, 0 6px 0 2px var(--g-ink); }
+.g-btn:active:not(:disabled) { transform: translateY(2px) scale(0.94); transition: transform 60ms; }
+.g-btn:disabled { filter: grayscale(0.8); opacity: 0.7; cursor: not-allowed; }
+.g-btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; box-shadow: 0 0 0 6px var(--color-focus); }
+
+/* Dark night-blue HUD boxes. */
+.g-box { border: 2px solid var(--g-ink); border-radius: 16px; background: linear-gradient(rgba(36, 48, 100, 0.92), rgba(24, 30, 72, 0.92)); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.14), 0 4px 0 rgba(0, 0, 0, 0.3); color: #fff; }
+.g-bar { position: relative; height: 20px; border: 2px solid var(--g-ink); border-radius: 10px; background: #141a3a; box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.4); overflow: hidden; }
+.g-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; background: linear-gradient(#fff08a, #ffd323 45%, #f0a800); box-shadow: inset 0 -3px 0 rgba(160, 90, 0, 0.35); transition: width 0.5s var(--g-pop); }
+.g-bar > i::after { content: ""; position: absolute; left: 6px; right: 6px; top: 3px; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.55); }
+.g-bar.hp > i { background: linear-gradient(#8ec5ff, #3e8ef0 50%, #2a6cc8); }
+.g-bar.hp.low > i { background: linear-gradient(#ff9a8a, #f04848 50%, #c8302f); }
+.g-bar.glint > i::before { content: ""; position: absolute; top: 0; bottom: 0; width: 30px; left: -40px; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent); animation: g-glint 0.5s ease-out; }
+@keyframes g-glint { to { left: 110%; } }
+
+/* Parchment panel with a ribbon title and a red close button. */
+.g-panel { position: relative; padding: 44px 22px 20px; border: 4px solid var(--g-panel-b); border-radius: 20px; background: var(--g-panel); color: #3a2410;
+  box-shadow: inset 0 0 0 3px #fff6dd, inset 0 -6px 0 rgba(107, 70, 38, 0.15), 0 8px 0 #3e2914, 0 8px 0 4px var(--g-ink); }
+.g-panel.pop { animation: g-panel-in 0.32s var(--g-pop); }
+@keyframes g-panel-in { from { transform: scale(0.6); opacity: 0; } }
+.g-panel > .g-ribbon { position: absolute; left: 50%; top: -26px; transform: translateX(-50%); }
+.g-x { position: absolute; right: -14px; top: -14px; width: 42px; height: 42px; border: 2px solid var(--g-ink); border-radius: 12px; cursor: pointer; color: #fff; display: grid; place-items: center;
+  background: linear-gradient(#ff8a7a, #f04848 55%, #cf2f33); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 4px 0 #8c1e22, 0 4px 0 2px var(--g-ink); }
+.g-x:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.g-ribbon { position: relative; display: inline-block; filter: drop-shadow(2px 0 0 var(--g-ink)) drop-shadow(-2px 0 0 var(--g-ink)) drop-shadow(0 2px 0 var(--g-ink)) drop-shadow(0 -2px 0 var(--g-ink)) drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35)); }
+.g-ribbon > b { position: relative; z-index: 1; display: block; padding: 8px 34px 10px; background: linear-gradient(#6fb0ff, #3e8ef0 55%, #2c74d4); font: 900 22px var(--font-game); color: #fff; -webkit-text-stroke: 2.5px var(--g-ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--g-ink); white-space: nowrap; }
+.g-ribbon::before, .g-ribbon::after { content: ""; position: absolute; top: 12px; width: 44px; height: 100%; background: #2459a8; z-index: 0; }
+.g-ribbon::before { left: -30px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 30% 50%); }
+.g-ribbon::after { right: -30px; clip-path: polygon(0 0, 100% 0, 70% 50%, 100% 100%, 0 100%); }
+.g-ribbon.red > b { background: linear-gradient(#ff8a7a, #f04848 55%, #cf2f33); }
+.g-ribbon.red::before, .g-ribbon.red::after { background: #a3222a; }
+.g-ribbon.gold > b { background: linear-gradient(#ffec8a, #ffd323 55%, #eca800); }
+.g-ribbon.gold::before, .g-ribbon.gold::after { background: #b97700; }
+.g-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border: 2px solid var(--g-panel-b); border-radius: 999px; background: #fff8e6; font: 700 14px var(--font-sans); color: #4a3018; }
+.g-chip.red { background: #ffe0dc; border-color: #b8302f; color: #9b1f1f; }
+
+/* Labels projected over the 3D scene. */
+.g3-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.g3-badge { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 2px; will-change: transform; }
+.g3-badge b { display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border: 2px solid var(--g-ink); border-radius: 9px; background: linear-gradient(#ff8a8a, #f04848 55%, #c8302f); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.4), 0 3px 0 var(--g-ink);
+  font: 900 17px var(--font-game); color: #fff; -webkit-text-stroke: 2px var(--g-ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--g-ink); }
+.g3-badge.due b { background: linear-gradient(#ffe07a, #ffb21e 55%, #e58a00); }
+.g3-badge.review b { background: linear-gradient(#b7f39a, #5cc02e 55%, #3f9a1f); }
+.g3-badge i { margin-left: 4px; padding: 3px 8px; border: 2px solid var(--g-ink); border-radius: 8px; background: var(--g-red); box-shadow: 0 2px 0 var(--g-ink); font: 900 13px var(--font-game); font-style: normal; color: #fff; -webkit-text-stroke: 2px var(--g-ink); paint-order: stroke fill; animation: g-bob 1.2s ease-in-out infinite; white-space: nowrap; }
+.g3-badge.review i { background: #3f9a1f; }
+.g3-badge.sel b { outline: 3px solid #fff; outline-offset: 2px; }
+.g3-badge.city b { background: linear-gradient(#7db8ff, #3e8ef0 55%, #2f78da); }
+.g3-badge .timer { padding: 3px 9px; border: 2px solid var(--g-ink); border-radius: 999px; background: linear-gradient(#fff7de, #f5e7c6); box-shadow: 0 2px 0 var(--g-ink); font: 800 13px var(--font-game); color: #5a3a1e; white-space: nowrap; }
+@keyframes g-bob { 50% { transform: translateY(-3px); } }
+.g3-lane { position: absolute; left: 0; top: 0; padding: 3px 10px; border: 2px solid var(--g-ink); border-radius: 9px; background: rgba(24, 30, 72, 0.75); white-space: nowrap;
+  font: 900 15px var(--font-game); color: #fff; -webkit-text-stroke: 2px var(--g-ink); paint-order: stroke fill; text-shadow: 0 2px 0 var(--g-ink); }
+.g3-lane small { font: 700 11px var(--font-sans); color: #dde6ff; -webkit-text-stroke: 0; text-shadow: none; margin-left: 4px; }
+.g3-fog { position: absolute; left: 0; top: 0; padding: 5px 12px; border: 2px solid var(--g-ink); border-radius: 999px; background: rgba(255, 255, 255, 0.88); font: 800 14px var(--font-game); color: #4a4380; white-space: nowrap; }
+.g3-labels.battle .g3-lane, .g3-labels.battle .g3-fog { opacity: 0.6; }
+
+/* Flying coins and floating numbers. */
+.g-fly { position: fixed; left: 0; top: 0; z-index: 400; pointer-events: none; margin: -14px 0 0 -14px; }
+.g-coin { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--g-ink); display: grid; place-items: center;
+  background: radial-gradient(circle at 36% 30%, #fff6b8 0 12%, #ffd323 34%, #e9a300 80%); box-shadow: inset 0 0 0 3px rgba(209, 139, 0, 0.55), inset 0 -3px 0 rgba(150, 80, 0, 0.4), 0 2px 0 var(--g-ink); }
+.g-coin::after { content: ""; width: 8px; height: 8px; border-radius: 2px; transform: rotate(45deg); background: #fff1a0; border: 1.5px solid #c27c00; }
+.g-float { position: fixed; z-index: 400; pointer-events: none; transform: translate(-50%, -50%); font: 900 30px var(--font-game); color: var(--g-gold); -webkit-text-stroke: 3px var(--g-ink); paint-order: stroke fill; text-shadow: 0 3px 0 var(--g-ink); animation: g-float 1s ease-out forwards; white-space: nowrap; }
+@keyframes g-float { 0% { transform: translate(-50%, -30%) scale(0.5); opacity: 0; } 20% { transform: translate(-50%, -60%) scale(1.25); opacity: 1; } 100% { transform: translate(-50%, -160%) scale(1); opacity: 0; } }
+
+@media (max-width: 767px) {
+  .g-ribbon > b { font-size: 17px; padding: 6px 18px 8px; }
+  .g-ribbon::before, .g-ribbon::after { width: 30px; top: 9px; }
+  .g-ribbon::before { left: -20px; }
+  .g-ribbon::after { right: -20px; }
+  .g3-lane small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .g3-badge i { animation: none; } }
