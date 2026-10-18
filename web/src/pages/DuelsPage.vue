@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import CityScene from '../components/CityScene.vue'
@@ -52,6 +52,13 @@ async function load() {
   } catch (e) { toasts.error(e) }
 }
 onMounted(async () => { await game.loadConfig(); load() })
+// Another challenge opened while on this page: the component is reused, so follow the address.
+watch(() => [route.query.challenge, route.query.opponent], ([c]) => {
+  challengeId.value = typeof c === 'string' ? c : ''
+  selected.value = null
+  preview.value = null
+  load()
+})
 
 async function pickChallenge(o: DuelList) {
   try {

@@ -36,7 +36,9 @@ const waveBar = ref<HTMLElement>()
 const glint = ref(false)
 const chestOpen = ref(false)
 const arena = ref<ArenaState | null>(null)
-const arenaOpen = ref(route.query.arena === '1')
+const arenaOpen = ref(false)
+/** The Arena's full state (with the team); the periodic `arena` above only feeds the badge. */
+const arenaFull = ref<ArenaState | null>(null)
 const badge = computed(() => arenaBadge(arena.value))
 
 // Only the newest response counts: a slow periodic refresh must not bring back an enemy that just fell.
@@ -64,6 +66,7 @@ onMounted(() => {
   timer = window.setInterval(() => { if (document.visibilityState === 'visible' && !battle.value) load() }, 20000)
 })
 onUnmounted(() => clearInterval(timer))
+onMounted(() => { if (route.query.arena === '1' && session.gameOn) openArena() })
 
 const enemies = computed(() => state.value?.enemies || [])
 const selected = computed(() => enemies.value.find(e => e.task_id === selectedId.value) || null)
@@ -127,6 +130,15 @@ function showResult(b: NonNullable<typeof battle.value>) {
 }
 function speed() { const b = battle.value; if (!b) return; b.speed = b.speed === 1 ? 2 : 1; scene.value?.setSpeed(b.speed) }
 function skip() { scene.value?.finishWave() }
+const arenaLoading = ref(false)
+async function refreshArena() {
+  arenaFull.value = await api.get<ArenaState>('/challenges?team=1')
+  arena.value = arenaFull.value
+}
+async function openArena() {
+  arenaLoading.value = true
+  try { await refreshArena(); arenaOpen.value = true } catch (e) { toasts.error(e) } finally { arenaLoading.value = false }
+}
 function closeArena() {
   arenaOpen.value = false
   if (route.query.arena) router.replace({ query: { ...route.query, arena: undefined } })
@@ -206,7 +218,7 @@ const resultTitle = computed(() => {
 
           <div class="actions">
             <button v-if="lastWave && !battle" class="g-btn yellow small" :class="{ pulse: unseen }" @click="startBattle(lastWave)"><span>{{ unseen ? 'Итог волны!' : 'Бой волны' }}</span></button>
-            <button v-if="!battle" class="g-btn yellow small arena-btn" :class="{ pulse: badge > 0 }" @click="arenaOpen = true">
+            <button v-if="!battle" class="g-btn yellow small arena-btn" :class="{ pulse: badge > 0 }" :aria-busy="arenaLoading" @click="openArena">
               <span>Вызвать на бой</span><i v-if="badge" class="cnt" :aria-label="`ждут вас: ${badge}`">{{ badge }}</i>
             </button>
           </div>
@@ -270,7 +282,7 @@ const resultTitle = computed(() => {
         </div>
       </section>
 
-      <ArenaPanel v-if="arenaOpen && arena" :state="arena" @close="closeArena" @changed="load" />
+      <ArenaPanel v-if="arenaOpen && arenaFull" :state="arenaFull" @close="closeArena" @changed="refreshArena" />
       <WaveChest v-if="chestOpen && chest && battle" :gold="chest.gold" :energy="chest.energy" :repair="chest.repair" :crowns="battle.wave.crowns" @close="closeChest" />
 
       <!-- The same horde for screen readers and keyboards: the 3D scene is decorative. -->

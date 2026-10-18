@@ -85,10 +85,15 @@ func TestDeclineCancelAndExpiry(t *testing.T) {
 		t.Fatal("declined")
 	}
 	maria.refused("challenge_closed", "POST", "/challenges/"+id+"/attack", map[string]any{"army": map[string]int{"guard": 1}})
-	// A declined challenge does not block a new one later.
-	again := maria.must(201, "POST", "/challenges", map[string]any{"to_id": alexeyID}, "").Body["id"].(string)
+	// «Не сейчас» is respected: the same colleague cannot be challenged again right away.
+	maria.refused("challenge_cooldown", "POST", "/challenges", map[string]any{"to_id": alexeyID})
+	again := maria.must(201, "POST", "/challenges", map[string]any{"to_id": dmitryID}, "").Body["id"].(string)
 	maria.must(200, "POST", "/challenges/"+again+"/cancel", nil, "")
-	alexey.refused("challenge_closed", "POST", "/challenges/"+again+"/accept", nil)
+	dmitry.refused("challenge_closed", "POST", "/challenges/"+again+"/accept", nil)
+	if _, err := pool.Exec(context.Background(), `UPDATE friendly_challenges SET created_at=now()-interval '13 hours' WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	maria.must(201, "POST", "/challenges", map[string]any{"to_id": alexeyID}, "")
 
 	old := alexey.must(201, "POST", "/challenges", map[string]any{"to_id": dmitryID}, "").Body["id"].(string)
 	if _, err := pool.Exec(context.Background(), `UPDATE friendly_challenges SET expires_at=now()-interval '1 minute' WHERE id=$1`, old); err != nil {
@@ -125,7 +130,10 @@ func TestOpenChallengeAndTavernLimit(t *testing.T) {
 		t.Fatal("attacked flag")
 	}
 	// The team list shows every colleague, with or without duels switched on.
-	if n := len(alexey.must(200, "GET", "/challenges", nil, "").Body["team"].([]any)); n < 2 {
+	if n := len(alexey.must(200, "GET", "/challenges", nil, "").Body["team"].([]any)); n != 0 {
+		t.Fatalf("the badge poll does not load the team: %d", n)
+	}
+	if n := len(alexey.must(200, "GET", "/challenges?team=1", nil, "").Body["team"].([]any)); n < 2 {
 		t.Fatalf("team: %d", n)
 	}
 
@@ -138,5 +146,36 @@ func TestOpenChallengeAndTavernLimit(t *testing.T) {
 	}
 	if num(alexey.must(200, "GET", "/challenges", nil, "").Body["per_day"]) != 5 {
 		t.Fatal("tavern 2: 5")
+	}
+}
+
+// Challenges follow the team as it is now: a colleague moved away or switched off can no longer be fought,
+// and a battle's city is visible only while the defender is in your team.
+func TestChallengesFollowTheTeam(t *testing.T) {
+	ts, _, _ := testServer(t)
+	admin, alexey, dmitry, maria := login(t, ts, "admin"), login(t, ts, "alexey"), login(t, ts, "dmitry"), login(t, ts, "maria")
+	dmitryID := meID(t, dmitry)
+	direct := alexey.must(201, "POST", "/challenges", map[string]any{"to_id": dmitryID}, "").Body["id"].(string)
+	dmitry.must(200, "POST", "/challenges/"+direct+"/accept", nil, "")
+	open := dmitry.must(201, "POST", "/challenges", map[string]any{}, "").Body["id"].(string)
+	b := maria.must(201, "POST", "/challenges/"+open+"/attack", map[string]any{"army": map[string]int{"guard": 1}}, "").Body
+	maria.must(200, "GET", "/battles/"+b["id"].(string)+"/city", nil, "")
+
+	var mobile string
+	for _, tm := range items(admin.must(200, "GET", "/admin/teams", nil, "")) {
+		if tm["name"] == "Мобайл" {
+			mobile = tm["id"].(string)
+		}
+	}
+	admin.must(200, "PATCH", "/admin/users/"+dmitryID, map[string]any{"team_id": mobile}, "")
+
+	alexey.refused("challenge_closed", "POST", "/challenges/"+direct+"/attack", map[string]any{"army": map[string]int{"guard": 1}})
+	alexey.refused("challenge_closed", "GET", "/challenges/"+direct+"/city", nil)
+	if c := challengeIn(alexey.must(200, "GET", "/challenges", nil, "").Body["outgoing"].([]any), direct); c != nil && (c["status"] == "accepted" || c["status"] == "pending") {
+		t.Fatalf("a moved colleague's challenge is closed: %v", c)
+	}
+	maria.refused("not_found", "GET", "/battles/"+b["id"].(string)+"/city", nil)
+	if len(dmitry.must(200, "GET", "/challenges", nil, "").Body["incoming"].([]any)) != 0 {
+		t.Fatal("old team's challenges do not follow into the new team")
 	}
 }

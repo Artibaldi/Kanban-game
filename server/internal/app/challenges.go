@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"kanban-game/server/internal/game"
 )
@@ -28,17 +29,21 @@ type challenge struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	Attacked  bool      `json:"attacked"`
 	TeamID    string    `json:"-"`
+	// FromHere/ToHere: the side is still active and still in the challenge's team.
+	FromHere bool `json:"-"`
+	ToHere   bool `json:"-"`
 }
 
 const challengeSelect = `SELECT c.id::text, c.from_id::text, uf.display_name, c.to_id::text, ut.display_name, c.to_id IS NULL, c.status,
  c.created_at, c.expires_at, c.team_id::text,
- EXISTS (SELECT 1 FROM battles b WHERE b.challenge_id=c.id AND b.attacker_id::text=$1)
+ EXISTS (SELECT 1 FROM battles b WHERE b.challenge_id=c.id AND b.attacker_id::text=$1),
+ uf.active AND uf.team_id=c.team_id, COALESCE(ut.active AND ut.team_id=c.team_id, false)
  FROM friendly_challenges c JOIN users uf ON uf.id=c.from_id LEFT JOIN users ut ON ut.id=c.to_id `
 
 func scanChallenges(rows pgx.Rows) ([]challenge, error) {
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (challenge, error) {
 		var c challenge
-		err := row.Scan(&c.ID, &c.FromID, &c.FromName, &c.ToID, &c.ToName, &c.Open, &c.Status, &c.CreatedAt, &c.ExpiresAt, &c.TeamID, &c.Attacked)
+		err := row.Scan(&c.ID, &c.FromID, &c.FromName, &c.ToID, &c.ToName, &c.Open, &c.Status, &c.CreatedAt, &c.ExpiresAt, &c.TeamID, &c.Attacked, &c.FromHere, &c.ToHere)
 		return c, err
 	})
 }
@@ -49,11 +54,16 @@ func expireChallenges(ctx context.Context, q dbtx, teamID string, now time.Time)
 	return err
 }
 
-func loadChallenge(ctx context.Context, tx pgx.Tx, a actor, id string) (challenge, error) {
+// loadChallenge reads a challenge of the actor's team; lock takes the row for an answer or an attack.
+func loadChallenge(ctx context.Context, q dbtx, a actor, id string, lock bool) (challenge, error) {
 	if !validUUID(id) {
 		return challenge{}, refuse(404, "not_found", "Вызов не найден.")
 	}
-	rows, err := tx.Query(ctx, challengeSelect+`WHERE c.id=$2 AND c.team_id::text=$3 FOR UPDATE OF c`, a.ID, id, a.TeamID)
+	forUpdate := ""
+	if lock {
+		forUpdate = " FOR UPDATE OF c"
+	}
+	rows, err := q.Query(ctx, challengeSelect+`WHERE c.id=$2 AND c.team_id::text=$3`+forUpdate, a.ID, id, a.TeamID)
 	if err != nil {
 		return challenge{}, err
 	}
@@ -67,8 +77,9 @@ func loadChallenge(ctx context.Context, tx pgx.Tx, a actor, id string) (challeng
 	return list[0], nil
 }
 
+// live: still waiting, and both sides still in the team (a colleague moved away or switched off closes it).
 func (c challenge) live(now time.Time) bool {
-	return c.ExpiresAt.After(now) && (c.Status == "pending" || c.Status == "accepted" || c.Status == "open")
+	return c.ExpiresAt.After(now) && (c.Status == "pending" || c.Status == "accepted" || c.Status == "open") && c.FromHere && (c.Open || c.ToHere)
 }
 
 // defenderFor checks that the actor may fight under the challenge now and returns whose city it is.
@@ -124,17 +135,17 @@ func (s *Server) listChallenges(w http.ResponseWriter, r *http.Request) {
 		}
 		return list, err
 	}
-	incoming, err := query(`WHERE c.to_id::text=$1 AND c.status IN ('pending','accepted') ORDER BY c.created_at DESC`)
+	incoming, err := query(`WHERE c.to_id::text=$1 AND c.team_id::text=$2 AND c.status IN ('pending','accepted') AND c.expires_at > $3 AND uf.active AND uf.team_id=c.team_id ORDER BY c.created_at DESC`, a.TeamID, now)
 	if err != nil {
 		failErr(w, err)
 		return
 	}
-	outgoing, err := query(`WHERE c.from_id::text=$1 AND c.created_at > $2 ORDER BY c.created_at DESC LIMIT 10`, now.Add(-7*24*time.Hour))
+	outgoing, err := query(`WHERE c.from_id::text=$1 AND c.team_id::text=$2 AND c.created_at > $3 ORDER BY c.created_at DESC LIMIT 10`, a.TeamID, now.Add(-7*24*time.Hour))
 	if err != nil {
 		failErr(w, err)
 		return
 	}
-	open, err := query(`WHERE c.team_id::text=$2 AND c.to_id IS NULL AND c.status='open' AND c.from_id::text<>$1 ORDER BY c.created_at DESC`, a.TeamID)
+	open, err := query(`WHERE c.team_id::text=$2 AND c.to_id IS NULL AND c.status='open' AND c.expires_at > $3 AND c.from_id::text<>$1 AND uf.active AND uf.team_id=c.team_id ORDER BY c.created_at DESC`, a.TeamID, now)
 	if err != nil {
 		failErr(w, err)
 		return
@@ -149,10 +160,13 @@ func (s *Server) listChallenges(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	team, err := teamForArena(ctx, s.db, a)
-	if err != nil {
-		failErr(w, err)
-		return
+	// The team (one city per colleague) is only loaded when the Arena is open, not for the badge.
+	team := []map[string]any{}
+	if r.URL.Query().Get("team") == "1" {
+		if team, err = teamForArena(ctx, s.db, a); err != nil {
+			failErr(w, err)
+			return
+		}
 	}
 	rows, err := s.db.Query(ctx, `SELECT b.id::text, u.id::text, u.display_name, b.stars, b.destruction, b.created_at FROM battles b JOIN users u ON u.id=b.attacker_id
  WHERE b.defender_id::text=$1 AND b.kind='friendly' AND b.created_at > $2 ORDER BY b.created_at DESC LIMIT 10`, a.ID, now.Add(-24*time.Hour))
@@ -248,6 +262,15 @@ func (s *Server) createChallenge(w http.ResponseWriter, r *http.Request) {
 			if n > 0 {
 				return 0, nil, refuse(409, "challenge_exists", "Вызов этому коллеге уже ждёт ответа.")
 			}
+			// «Не сейчас» is respected: no new challenge to the same colleague for a while.
+			var last *time.Time
+			if err = tx.QueryRow(ctx, `SELECT max(created_at) FROM friendly_challenges WHERE from_id=$1 AND to_id=$2 AND status='declined'`, a.ID, *in.ToID).Scan(&last); err != nil {
+				return 0, nil, err
+			}
+			if last != nil && now.Sub(*last) < game.ChallengeCooldown {
+				h := int((game.ChallengeCooldown - now.Sub(*last)).Hours()) + 1
+				return 0, nil, refuse(409, "challenge_cooldown", fmt.Sprintf("Коллега ответил «не сейчас». Вызвать снова можно через %d ч.", h))
+			}
 			to = *in.ToID
 			summary = fmt.Sprintf("Вызов на дружеский бой: %s", name)
 		} else {
@@ -264,14 +287,19 @@ func (s *Server) createChallenge(w http.ResponseWriter, r *http.Request) {
 			status = "open"
 		}
 		var id string
-		if err := tx.QueryRow(ctx, `INSERT INTO friendly_challenges(team_id,from_id,to_id,status,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING id::text`,
-			a.TeamID, a.ID, to, status, now.Add(game.ChallengeTTL)).Scan(&id); err != nil {
+		err := tx.QueryRow(ctx, `INSERT INTO friendly_challenges(team_id,from_id,to_id,status,expires_at) VALUES($1,$2,$3,$4,$5) RETURNING id::text`,
+			a.TeamID, a.ID, to, status, now.Add(game.ChallengeTTL)).Scan(&id)
+		if uniqueViolation(err) {
+			// Two requests at once: the unique index is the last guard.
+			return 0, nil, refuse(409, "challenge_exists", "Такой вызов уже есть.")
+		}
+		if err != nil {
 			return 0, nil, err
 		}
 		if err := audit(ctx, tx, a.ID, a.TeamID, "challenge.sent", "challenge", id, summary); err != nil {
 			return 0, nil, err
 		}
-		c, err := loadChallenge(ctx, tx, a, id)
+		c, err := loadChallenge(ctx, tx, a, id, false)
 		return 201, c, err
 	})
 }
@@ -290,7 +318,7 @@ func (s *Server) answerChallenge(action string) http.HandlerFunc {
 		}
 		s.command(w, r, a, func(ctx context.Context, tx pgx.Tx, _ []byte) (int, any, error) {
 			now := s.now()
-			c, err := loadChallenge(ctx, tx, a, id)
+			c, err := loadChallenge(ctx, tx, a, id, true)
 			if err != nil {
 				return 0, nil, err
 			}
@@ -335,33 +363,32 @@ func (s *Server) challengeCity(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	var out map[string]any
-	err = s.inTx(r.Context(), func(tx pgx.Tx) error {
-		c, err := loadChallenge(r.Context(), tx, a, id)
-		if err != nil {
-			return err
-		}
-		def, name, err := c.defenderFor(a, s.now())
-		if err != nil {
-			return err
-		}
-		if out, err = cityDTO(r.Context(), tx, def); err != nil {
-			return err
-		}
-		c2, err := loadCity(r.Context(), tx, def)
-		if err != nil {
-			return err
-		}
-		out["defense"] = game.DefenseOf(c2)
-		out["opponent_id"] = def
-		out["challenge"] = c
-		out["opponent_name"] = name
-		return nil
-	})
+	// A read: no transaction and no row locks.
+	ctx := r.Context()
+	c, err := loadChallenge(ctx, s.db, a, id, false)
 	if err != nil {
 		failErr(w, err)
 		return
 	}
+	def, name, err := c.defenderFor(a, s.now())
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	out, err := cityDTO(ctx, s.db, def)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	city, err := loadCity(ctx, s.db, def)
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	out["defense"] = game.DefenseOf(city)
+	out["opponent_id"] = def
+	out["challenge"] = c
+	out["opponent_name"] = name
 	respond(w, 200, out)
 }
 
@@ -383,7 +410,7 @@ func (s *Server) attackChallenge(w http.ResponseWriter, r *http.Request) {
 		if err := decodeInto(raw, &in); err != nil {
 			return 0, nil, err
 		}
-		c, err := loadChallenge(ctx, tx, a, id)
+		c, err := loadChallenge(ctx, tx, a, id, true)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -392,6 +419,10 @@ func (s *Server) attackChallenge(w http.ResponseWriter, r *http.Request) {
 			return 0, nil, err
 		}
 		battleID, err := s.fightFriendly(ctx, tx, a, def, name, in.Army, &c.ID)
+		if uniqueViolation(err) {
+			// A parallel attack on the same open challenge: one battle per attacker.
+			return 0, nil, refuse(409, "already_attacked", "Вы уже ответили на этот вызов.")
+		}
 		if err != nil {
 			return 0, nil, err
 		}
@@ -403,4 +434,16 @@ func (s *Server) attackChallenge(w http.ResponseWriter, r *http.Request) {
 		out, err := battleDTO(ctx, tx, a, battleID)
 		return 201, out, err
 	})
+}
+
+// uniqueViolation: a unique index refused the row (the last guard against a double action).
+func uniqueViolation(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && pe.Code == "23505"
+}
+
+// closeChallengesOf closes the live challenges of a user who leaves the team or is switched off.
+func closeChallengesOf(ctx context.Context, tx pgx.Tx, userID string) error {
+	_, err := tx.Exec(ctx, `UPDATE friendly_challenges SET status='closed' WHERE (from_id=$1 OR to_id=$1) AND status IN ('pending','accepted','open')`, userID)
+	return err
 }

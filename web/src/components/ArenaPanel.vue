@@ -2,6 +2,7 @@
 // The Arena: challenges to friendly duels, opened from the fortress. The challenge is the consent:
 // a colleague accepts it, or posts an open challenge for the team. «Не сейчас» is quiet.
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import type { MemberAction } from '../lib/arena'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import { api } from '../api'
@@ -18,12 +19,17 @@ const toasts = useToasts()
 const busy = ref('')
 const root = ref<HTMLElement>()
 
-const now = computed(() => new Date())
+// The clock behind «ещё N ч», refreshed every minute while the Arena is open.
+const now = ref(new Date())
+let tick = 0
 const pending = computed(() => props.state.incoming.filter(c => c.status === 'pending'))
 const awaiting = computed(() => props.state.incoming.filter(c => c.status === 'accepted'))
 const ready = computed(() => props.state.outgoing.filter(c => c.status === 'accepted'))
 const open = computed(() => myOpen(props.state.outgoing))
-const recent = computed(() => props.state.outgoing.filter(c => !c.open && (c.status === 'declined' || c.status === 'closed')).slice(0, 3))
+const live = (c: { status: string }) => c.status === 'pending' || c.status === 'accepted'
+// Closed challenges worth a word, unless a newer one to the same colleague is already waiting.
+const recent = computed(() => props.state.outgoing.filter(c => !c.open && (c.status === 'declined' || c.status === 'closed') && !props.state.outgoing.some(x => x.to_id === c.to_id && live(x))).slice(0, 3))
+const actions = computed(() => Object.fromEntries(props.state.team.map(m => [m.user_id, memberAction(m, props.state.outgoing)])) as Record<string, MemberAction>)
 const limitLeft = computed(() => Math.max(0, props.state.per_day - props.state.today))
 
 async function run(key: string, fn: () => Promise<unknown>, ok: string) {
@@ -40,9 +46,22 @@ const fight = (id: string) => router.push(`/fortress/duels?challenge=${id}`)
 const duel = (m: ArenaMember) => router.push(`/fortress/duels?opponent=${m.user_id}`)
 const watchBattle = (id: string) => router.push(`/battles/${id}`)
 
-function onKey(e: KeyboardEvent) { if (e.key === 'Escape') emit('close') }
-onMounted(() => { addEventListener('keydown', onKey); nextTick(() => root.value?.querySelector<HTMLElement>('.g-x')?.focus()) })
-onUnmounted(() => removeEventListener('keydown', onKey))
+function onKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') { emit('close'); return }
+  // Keep Tab inside the Arena.
+  if (e.key !== 'Tab') return
+  const f = [...(root.value?.querySelectorAll<HTMLElement>('button:not([disabled])') || [])]
+  if (!f.length) return
+  const i = f.indexOf(document.activeElement as HTMLElement)
+  if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus() }
+  else if (!e.shiftKey && (i === -1 || i === f.length - 1)) { e.preventDefault(); f[0].focus() }
+}
+onMounted(() => {
+  addEventListener('keydown', onKey)
+  tick = window.setInterval(() => (now.value = new Date()), 60000)
+  nextTick(() => root.value?.querySelector<HTMLElement>('.g-x')?.focus())
+})
+onUnmounted(() => { removeEventListener('keydown', onKey); clearInterval(tick) })
 </script>
 
 <template>
@@ -121,12 +140,10 @@ onUnmounted(() => removeEventListener('keydown', onKey))
             <span class="th g-stroke s2" :title="`Ратуша ${m.townhall}`">{{ m.townhall }}</span>
             <strong>{{ m.display_name }}</strong>
             <span class="meta">башни {{ m.defense.towers }} · стены {{ m.defense.walls }}</span>
-            <template v-for="act in [memberAction(m, state.outgoing)]" :key="act.kind">
-              <button v-if="act.kind === 'challenge'" class="g-btn small" :disabled="!!busy" :aria-busy="busy === 'c:' + m.user_id" @click="challenge(m)"><span>Вызвать</span></button>
-              <button v-else-if="act.kind === 'duel'" class="g-btn yellow small" :disabled="!limitLeft" @click="duel(m)"><span>В бой</span></button>
-              <button v-else-if="act.kind === 'fight'" class="g-btn yellow small" :disabled="!limitLeft" @click="fight(act.id)"><span>Вызов принят — в бой</span></button>
-              <span v-else class="wait">Ждёт ответа <button class="link" :disabled="!!busy" @click="cancel(act.id)">отменить</button></span>
-            </template>
+            <button v-if="actions[m.user_id].kind === 'challenge'" class="g-btn small" :disabled="!!busy" :aria-busy="busy === 'c:' + m.user_id" @click="challenge(m)"><span>Вызвать</span></button>
+            <button v-else-if="actions[m.user_id].kind === 'duel'" class="g-btn yellow small" :disabled="!limitLeft" @click="duel(m)"><span>В бой</span></button>
+            <button v-else-if="actions[m.user_id].kind === 'fight'" class="g-btn yellow small" :disabled="!limitLeft" @click="fight((actions[m.user_id] as { id: string }).id)"><span>Вызов принят — в бой</span></button>
+            <span v-else class="wait">Ждёт ответа <button class="link" :disabled="!!busy" @click="cancel((actions[m.user_id] as { id: string }).id)">отменить</button></span>
           </article>
         </div>
         <p v-for="c in recent" :key="c.id" class="note">{{ c.to_name }}: {{ c.status === 'declined' ? 'не сейчас' : 'вызов истёк' }} — можно вызвать снова.</p>

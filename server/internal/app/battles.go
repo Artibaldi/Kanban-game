@@ -345,8 +345,10 @@ func (s *Server) battleCity(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	var att, def string
-	err = s.db.QueryRow(ctx, `SELECT attacker_id::text, defender_id::text FROM battles WHERE id=$1`, id).Scan(&att, &def)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !a.admin() && a.ID != att && a.ID != def) {
+	var sameTeam bool
+	err = s.db.QueryRow(ctx, `SELECT b.attacker_id::text, b.defender_id::text, COALESCE(u.team_id::text = $2, false) FROM battles b JOIN users u ON u.id=b.defender_id WHERE b.id=$1`, id, a.TeamID).Scan(&att, &def, &sameTeam)
+	// Only the two who fought, and only while the defender is in your team (the city is today's layout).
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !a.admin() && ((a.ID != att && a.ID != def) || !sameTeam)) {
 		failErr(w, refuse(404, "not_found", "Бой не найден."))
 		return
 	}
