@@ -1,16 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Toasts from './Toasts.vue'
-import ResourceBar from '../components/ResourceBar.vue'
+import GameCounters from '../components/GameCounters.vue'
 import GameRulesDialog from '../components/GameRulesDialog.vue'
+import { initials } from '../lib/work'
 import { useSession } from '../stores/session'
 import { useGame } from '../stores/game'
+import { useWork } from '../stores/work'
 import { useToasts } from '../stores/toast'
 
 const session = useSession()
 const game = useGame()
+const work = useWork()
 const toasts = useToasts()
 const route = useRoute()
 const router = useRouter()
@@ -20,27 +23,49 @@ const all: NavItem[] = [
   { to: '/', label: 'Главная', icon: 'home' },
   { to: '/board', label: 'Доска', icon: 'board' },
   { to: '/review', label: 'Проверка', icon: 'review', lead: true },
+  { to: '/progress', label: 'Прогресс', icon: 'chart' },
   { to: '/fortress', label: 'Крепость', icon: 'flag', game: true },
   { to: '/city', label: 'Город', icon: 'castle', game: true },
   { to: '/army', label: 'Казарма', icon: 'shield', game: true },
-  { to: '/progress', label: 'Прогресс', icon: 'chart' },
   { to: '/admin', label: 'Админ', icon: 'users', admin: true },
 ]
 const nav = computed(() => all.filter(i => (!i.game || session.gameOn) && (!i.lead || session.isLead) && (!i.admin || session.isAdmin)))
-const mobileNav = computed(() => nav.value.filter(i => i.to !== '/army' && i.to !== '/admin' && i.to !== '/review').slice(0, 5))
+const mobileNav = computed(() => {
+  const want = ['/', '/board', session.isLead ? '/review' : '/progress', session.gameOn ? '/fortress' : '/progress', session.gameOn ? '/city' : '']
+  return [...new Set(want)].map(to => nav.value.find(i => i.to === to)).filter((i): i is NavItem => !!i)
+})
 const active = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to))
+
+// The dark pill slides under the current section.
+const navEl = ref<HTMLElement>()
+const ind = ref({ x: 0, w: 0, on: false })
+function slide() {
+  const el = navEl.value?.querySelector<HTMLElement>('[aria-current="page"]')
+  ind.value = el ? { x: el.offsetLeft, w: el.offsetWidth, on: true } : { ...ind.value, on: false }
+}
+watch([() => route.path, nav, () => work.reviewCount], () => nextTick(slide))
 
 let timer = 0
 onMounted(() => {
-  timer = window.setInterval(() => { if (session.gameOn && document.visibilityState === 'visible') game.refresh() }, 15000)
+  timer = window.setInterval(() => {
+    if (document.visibilityState !== 'visible') return
+    if (session.gameOn) game.refresh()
+    if (session.isLead) work.refreshReview()
+  }, 15000)
+  addEventListener('resize', slide)
+  document.fonts?.ready.then(slide)
 })
-onUnmounted(() => clearInterval(timer))
-watch(() => session.me?.id, id => { if (id && session.plays) { game.refresh(); game.loadConfig() } }, { immediate: true })
+onUnmounted(() => { clearInterval(timer); removeEventListener('resize', slide) })
+watch(() => session.me?.id, id => {
+  if (id && session.plays) { game.refresh(); game.loadConfig() }
+  if (id && session.isLead) work.refreshReview()
+}, { immediate: true })
 
-async function toggleMode() {
+async function setMode(on: boolean) {
+  if (!session.me || session.me.game_mode === on) return
   try {
-    await session.setGameMode(!session.me?.game_mode)
-    toasts.push({ kind: 'info', title: session.me?.game_mode ? 'Игровой режим включён' : 'Рабочий режим: только задачи, без игры и анимаций' })
+    await session.setGameMode(on)
+    toasts.push({ kind: 'info', title: on ? 'Игровой режим включён' : 'Рабочий режим: только задачи, без игры и анимаций' })
     if (!session.gameOn && route.meta.game) router.push('/board')
   } catch (e) { toasts.error(e) }
 }
@@ -52,33 +77,34 @@ async function logout() { await session.logout(); router.push('/login') }
   <template v-if="session.me && route.path !== '/login'">
     <header class="top">
       <RouterLink to="/" class="brand" aria-label="Бастион задач — главная">
-        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><path d="M4 28V12l4-3V4h4v3l4-3 4 3V4h4v5l4 3v16h-9v-6a3 3 0 0 0-6 0v6z" fill="var(--art-gold)" stroke="var(--art-gold-dark)" stroke-width="1.5"/></svg>
-        <span class="brand-name">Бастион задач</span>
+        <span class="logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="22" height="22"><path d="M4 28V12l4-3V4h4v3l4-3 4 3V4h4v5l4 3v16h-9v-6a3 3 0 0 0-6 0v6z" fill="currentColor"/></svg></span>
+        <span class="brand-text">Бастион задач<small>{{ session.me.team_name ? `Команда «${session.me.team_name}»` : 'Все команды' }}</small></span>
       </RouterLink>
-      <nav class="nav" aria-label="Разделы">
-        <RouterLink v-for="i in nav" :key="i.to" :to="i.to" class="nav-link" :aria-current="active(i.to) ? 'page' : undefined">
-          <Icon :name="i.icon" :size="16" />{{ i.label }}
+
+      <nav ref="navEl" class="nav glass" aria-label="Разделы">
+        <span class="ind" :class="{ on: ind.on }" :style="{ transform: `translateX(${ind.x}px)`, width: ind.w + 'px' }" aria-hidden="true" />
+        <RouterLink v-for="i in nav" :key="i.to" :to="i.to" class="nav-link" :class="{ game: i.game }" :aria-current="active(i.to) ? 'page' : undefined">
+          {{ i.label }}<span v-if="i.to === '/review' && work.reviewCount" class="nb" :aria-label="`, ждут ${work.reviewCount}`">{{ work.reviewCount }}</span>
         </RouterLink>
       </nav>
+
       <div class="right">
-        <ResourceBar v-if="session.gameOn && game.player" :player="game.player" compact class="game-only res-top" />
-        <button v-if="session.plays" class="mode" :aria-pressed="session.me.game_mode" @click="toggleMode"
-          :title="session.me.game_mode ? 'Переключить в рабочий режим: только канбан' : 'Включить игровой режим'">
-          <Icon :name="session.me.game_mode ? 'gamepad' : 'briefcase'" :size="16" />
-          <span class="mode-text">{{ session.me.game_mode ? 'Игра' : 'Работа' }}</span>
-        </button>
-        <RouterLink to="/settings" class="me" :title="`${session.me.display_name}, ${session.me.team_name || 'все команды'} — настройки`">
-          <span class="avatar" aria-hidden="true">{{ session.me.display_name.split(' ').map(p => p[0]).join('').slice(0, 2) }}</span>
-          <span class="me-name">{{ session.me.display_name.split(' ')[0] }}</span>
-        </RouterLink>
-        <button class="btn ghost icon" aria-label="Выйти" title="Выйти" @click="logout"><Icon name="logout" /></button>
+        <GameCounters v-if="session.gameOn && game.player" :player="game.player" class="game-only counters-top" />
+        <div v-if="session.plays" class="mode glass" role="radiogroup" aria-label="Режим">
+          <span class="mode-ind" :class="{ game: session.me.game_mode }" aria-hidden="true" />
+          <button role="radio" :aria-checked="!session.me.game_mode" title="Только канбан, без игры и анимаций" @click="setMode(false)">Работа</button>
+          <button role="radio" :aria-checked="session.me.game_mode" title="Награды, крепость и город" @click="setMode(true)">Игра</button>
+        </div>
+        <RouterLink to="/settings" class="me" :title="`${session.me.display_name} — настройки`" :aria-label="`${session.me.display_name}, настройки`">{{ initials(session.me.display_name) }}</RouterLink>
+        <button class="btn ghost icon logout" aria-label="Выйти" title="Выйти" @click="logout"><Icon name="logout" /></button>
       </div>
     </header>
-    <div v-if="session.gameOn && game.player" class="res-mobile game-only"><ResourceBar :player="game.player" compact /></div>
+    <div v-if="session.gameOn && game.player" class="counters-mobile game-only"><GameCounters :player="game.player" /></div>
     <main id="main"><RouterView /></main>
-    <nav class="bottom" aria-label="Разделы">
+    <nav class="tabbar" aria-label="Разделы">
       <RouterLink v-for="i in mobileNav" :key="i.to" :to="i.to" :aria-current="active(i.to) ? 'page' : undefined">
         <Icon :name="i.icon" :size="20" /><span>{{ i.label }}</span>
+        <span v-if="i.to === '/review' && work.reviewCount" class="nb">{{ work.reviewCount }}</span>
       </RouterLink>
     </nav>
   </template>
@@ -90,33 +116,47 @@ async function logout() { await session.logout(); router.push('/login') }
 <style scoped>
 .skip { position: absolute; left: -999px; top: 8px; z-index: 100; background: var(--color-surface); padding: 8px 12px; border-radius: var(--radius-sm); }
 .skip:focus { left: 8px; }
-.top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: var(--space-4); padding: 0 var(--space-5); height: 60px; background: color-mix(in srgb, var(--color-surface) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--color-border); }
-.brand { display: flex; align-items: center; gap: var(--space-2); text-decoration: none; color: var(--color-text); flex: none; }
-.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 1.125rem; }
-.nav { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.nav-link { display: inline-flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: var(--radius-sm); color: var(--color-text-muted); text-decoration: none; font-weight: 600; font-size: var(--text-sm); white-space: nowrap; }
-.nav-link:hover { color: var(--color-text); background: var(--color-action-secondary-hover); }
-.nav-link[aria-current="page"] { color: var(--color-action-primary); background: var(--color-selected); }
-@media (max-width: 1360px) { .nav-link :deep(svg) { display: none; } .nav-link { padding: 8px 8px; } }
-.right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); flex: none; }
-.mode { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--radius-pill); border: 1px solid var(--color-border-strong); background: var(--color-surface); font-weight: 650; font-size: var(--text-sm); cursor: pointer; }
-.mode:hover { background: var(--color-action-secondary-hover); }
-.mode[aria-pressed="true"] { border-color: var(--color-gold); color: var(--color-gold); background: var(--color-gold-bg); }
-.me { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--color-text); font-weight: 600; font-size: var(--text-sm); padding: 4px 8px 4px 4px; border-radius: var(--radius-pill); }
-.me:hover { background: var(--color-action-secondary-hover); }
-.avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--color-action-primary); color: var(--color-action-primary-text); font-size: var(--text-xs); font-weight: 700; }
-.res-mobile { display: none; }
-.bottom { display: none; }
-@media (max-width: 1180px) { .me-name, .brand-name { display: none; } }
-@media (max-width: 960px) { .res-top { display: none !important; } .res-mobile { display: flex; justify-content: center; padding: 8px 16px; border-bottom: 1px solid var(--color-border); background: var(--color-surface); } }
-@media (max-width: 767px) {
-  .top { padding: 0 var(--space-4); gap: var(--space-2); height: 56px; }
-  .brand-name { display: inline; }
-  .nav { display: none; }
-  .mode-text { display: none; }
-  .bottom { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; background: var(--color-surface); border-top: 1px solid var(--color-border); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
-  .bottom a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; min-height: var(--size-touch); color: var(--color-text-muted); text-decoration: none; font-size: 11px; font-weight: 600; }
-  .bottom a[aria-current="page"] { color: var(--color-action-primary); }
+.top { max-width: 1560px; margin: 0 auto; padding: 22px var(--space-8) 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-4); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--color-text); min-width: 0; }
+.logo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: #1e1e1e; color: var(--gold-fill); flex: none; }
+.brand-text { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; line-height: 1.25; min-width: 0; }
+.brand-text small { display: block; font-size: 12px; font-weight: 400; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.nav { justify-self: center; position: relative; display: flex; gap: 2px; padding: 4px; border-radius: var(--radius-pill); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.ind { position: absolute; top: 4px; left: 0; height: 38px; border-radius: var(--radius-pill); background: var(--color-action-primary); opacity: 0; transition: transform 0.28s var(--ease-in-out), width 0.28s var(--ease-in-out), opacity 0.2s; }
+.ind.on { opacity: 1; }
+.nav-link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: var(--radius-pill); color: var(--color-text); text-decoration: none; font-weight: 500; font-size: 14px; white-space: nowrap; transition: color 0.3s; }
+.nav-link:hover:not([aria-current="page"]) { background: var(--color-action-secondary-hover); }
+.nav-link[aria-current="page"] { color: var(--color-action-primary-text); }
+.nav-link.game::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gold-fill); box-shadow: 0 0 0 1px var(--gold-edge); }
+.nb { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--gold-fill); color: #1e1e1e; font-size: 11px; font-weight: 700; }
+
+.right { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.mode { position: relative; display: flex; padding: 4px; border-radius: var(--radius-pill); }
+.mode button { position: relative; z-index: 1; height: 34px; padding: 0 14px; border: 0; background: none; border-radius: var(--radius-pill); font-weight: 500; font-size: 14px; cursor: pointer; transition: color 0.3s; }
+.mode button[aria-checked="true"] { color: var(--color-action-primary-text); }
+.mode-ind { position: absolute; top: 4px; left: 4px; width: calc(50% - 4px); height: 34px; border-radius: var(--radius-pill); background: var(--color-action-primary); transition: transform 0.28s var(--ease-in-out), background 0.2s; }
+.mode-ind.game { transform: translateX(100%); background: linear-gradient(180deg, var(--gold-top), var(--gold-bottom)); box-shadow: inset 0 -2px 0 rgba(122, 74, 0, 0.35); }
+.mode-ind.game ~ button[aria-checked="true"] { color: var(--gold-ink); font-weight: 700; }
+.me { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #f7e39a; color: #1e1e1e; font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8); flex: none; }
+.counters-mobile { display: none; }
+.tabbar { display: none; }
+
+@media (max-width: 1360px) {
+  .top { grid-template-columns: minmax(0, 1fr) auto; }
+  .nav { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
 }
-@media (max-width: 380px) { .brand-name { display: none; } }
+@media (max-width: 960px) { .counters-top { display: none !important; } .counters-mobile { display: flex; justify-content: center; padding: 14px 16px 0; } }
+@media (max-width: 767px) {
+  .top { padding: 14px var(--space-4) 0; gap: var(--space-3); }
+  .nav, .logout { display: none; }
+  .mode button { height: 32px; padding: 0 12px; }
+  .mode-ind { height: 32px; }
+  .tabbar { display: flex; position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); z-index: 44; height: 66px; padding: 6px; border-radius: 26px; background: #1e1e1e; box-shadow: 0 18px 40px rgba(30, 20, 10, 0.3); }
+  .tabbar a { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 20px; color: #b8b8b8; font-size: 11px; font-weight: 500; text-decoration: none; min-width: 0; transition: color 0.25s, background 0.25s; }
+  .tabbar a[aria-current="page"] { color: #fff; background: rgba(255, 255, 255, 0.12); }
+  .tabbar .nb { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 18px; height: 18px; font-size: 10px; }
+}
+@media (max-width: 420px) { .brand-text small { display: none; } .brand-text { font-size: 15px; } }
 </style>

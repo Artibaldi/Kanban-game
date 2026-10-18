@@ -1,7 +1,9 @@
-/* Design tokens: one CSS-variable layer for the whole app. Light by default; dark via data-theme or the system. */
+/* Design tokens: one CSS-variable layer for the whole app. Light by default; dark via data-theme or the system.
+   The work layer follows the CRM reference: warm gradient page, glass panels, cards filled with the stage colour. */
 :root {
-  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Georgia", "Iowan Old Style", "Times New Roman", serif;
+  --font-sans: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-game: "Rubik", "Arial Black", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --text-xs: 0.75rem;
@@ -9,7 +11,7 @@
   --text-md: 0.9375rem;
   --text-lg: 1.125rem;
   --text-xl: 1.5rem;
-  --text-display: 2.375rem;
+  --text-display: 2rem;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -20,65 +22,93 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
   --radius-pill: 999px;
 
-  --size-control: 36px;
-  --size-control-sm: 30px;
+  --size-control: 40px;
+  --size-control-sm: 32px;
   --size-touch: 44px;
 
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 420ms;
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  --color-page: #f3f0e8;
+  --page-gradient: linear-gradient(135deg, #fbf3e6 0%, #f8dcc8 45%, #d9eedf 100%);
+  --color-page: #fbf3e6;
   --color-surface: #fffdf8;
-  --color-surface-2: #f7f3ea;
-  --color-surface-sunken: #ebe6da;
-  --color-border: #dcd4c3;
-  --color-border-strong: #b9ae97;
-  --color-text: #1d2521;
-  --color-text-muted: #56605a;
-  --color-text-inverse: #fbf8f1;
+  --color-surface-2: #fff7ec;
+  --color-surface-sunken: #f3e7d8;
+  --color-border: #ebdfcf;
+  --color-border-strong: #cdbba5;
+  --color-text: #1e1e1e;
+  --color-text-muted: #6b6560;
+  --color-text-inverse: #fffdf8;
   --color-focus: #1b6fd1;
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.65);
 
-  --color-action-primary: #1d6b57;
-  --color-action-primary-hover: #155343;
+  --color-action-primary: #1e1e1e;
+  --color-action-primary-hover: #3b3936;
   --color-action-primary-text: #ffffff;
-  --color-action-secondary: #ffffff;
-  --color-action-secondary-hover: #efe9dc;
+  --color-action-secondary: rgba(255, 255, 255, 0.7);
+  --color-action-secondary-hover: rgba(255, 255, 255, 0.95);
   --color-action-destructive: #b3261e;
   --color-action-destructive-hover: #8f1d17;
-  --color-selected: #e2efe9;
+  --color-selected: #f3e3cf;
+  --color-accent: #2f6b57;
 
-  --color-success: #1e7a3c;
-  --color-success-bg: #e3f3e7;
-  --color-warning: #8a5300;
-  --color-warning-bg: #fbeed3;
-  --color-danger: #b3261e;
-  --color-danger-bg: #fbe4e1;
+  --color-success: #1f6b4f;
+  --color-success-bg: #d9eedf;
+  --color-warning: #7a4a00;
+  --color-warning-bg: #fbecc4;
+  --color-danger: #a8341a;
+  --color-danger-bg: #fbe3d6;
   --color-info: #1a5fb4;
   --color-info-bg: #e3edfa;
 
   --color-gold: #8a6212;
   --color-gold-bg: #f8ecc9;
-  --color-energy: #1e5fb8;
-  --color-energy-bg: #e0ebfb;
+  --color-energy: #4b33b8;
+  --color-energy-bg: #e9e3ff;
   --color-xp: #6a3fb0;
   --color-xp-bg: #ece3fa;
   --color-trophy: #9a4d0c;
+
+  /* Game counters and reward chips: the only game-styled pieces on work screens. */
+  --gold-fill: #ffc42e;
+  --gold-top: #ffd75a;
+  --gold-bottom: #ffb419;
+  --gold-ink: #3a2400;
+  --gold-edge: #7a4a00;
+  --energy-top: #9c7bff;
+  --energy-bottom: #6b4ce6;
+  --energy-edge: #3b2690;
+
+  /* Stage colours (cards and the column dots). */
+  --stage-backlog: #fff7ec;
+  --stage-ready: #f2cf5b;
+  --stage-in_progress: #c24a20;
+  --stage-review: #1e1e1e;
+  --stage-done: #2f6b57;
 
   --color-p1: #b3261e;
   --color-p2: #a15c00;
   --color-p3: #3d6b52;
   --color-p4: #5f6770;
 
-  --shadow-sm: 0 1px 2px rgba(35, 30, 20, 0.08);
-  --shadow-md: 0 4px 14px rgba(35, 30, 20, 0.12);
-  --shadow-lg: 0 16px 40px rgba(35, 30, 20, 0.2);
+  --shadow-sm: 0 1px 2px rgba(60, 40, 20, 0.06), 0 4px 12px rgba(60, 40, 20, 0.06);
+  --shadow-md: 0 2px 4px rgba(60, 40, 20, 0.07), 0 12px 28px rgba(60, 40, 20, 0.12);
+  --shadow-lg: 0 24px 60px rgba(40, 25, 10, 0.28);
+  --shadow-drag: 0 30px 50px rgba(40, 25, 10, 0.25);
 
   /* Illustration palette for the city and troops (kept readable in both themes). */
   --art-grass-1: #8fbf6a;
@@ -110,46 +140,55 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-page: #101512;
-    --color-surface: #172019;
-    --color-surface-2: #1d2820;
-    --color-surface-sunken: #0c110e;
-    --color-border: #2c3a31;
-    --color-border-strong: #45574b;
-    --color-text: #e6ece6;
-    --color-text-muted: #a3b0a7;
-    --color-text-inverse: #101512;
+    color-scheme: dark;
+    --page-gradient: linear-gradient(135deg, #17140f 0%, #231a14 50%, #12201a 100%);
+    --color-page: #17140f;
+    --color-surface: #221e19;
+    --color-surface-2: #2a251f;
+    --color-surface-sunken: #120f0b;
+    --color-border: #3a332b;
+    --color-border-strong: #54493d;
+    --color-text: #ede6da;
+    --color-text-muted: #a9a196;
+    --color-text-inverse: #17140f;
     --color-focus: #7ab4ff;
-    --color-action-primary: #4cbf9c;
-    --color-action-primary-hover: #6fd3b3;
-    --color-action-primary-text: #0b1a14;
-    --color-action-secondary: #1d2820;
-    --color-action-secondary-hover: #26332a;
-    --color-action-destructive: #ff7b72;
-    --color-action-destructive-hover: #ffa198;
-    --color-selected: #1f3a30;
-    --color-success: #6fd08c;
-    --color-success-bg: #163222;
-    --color-warning: #f0b35c;
-    --color-warning-bg: #3a2a10;
-    --color-danger: #ff8a80;
-    --color-danger-bg: #3d1916;
+    --glass: rgba(42, 37, 31, 0.62);
+    --glass-strong: rgba(48, 42, 35, 0.9);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --color-action-primary: #ede6da;
+    --color-action-primary-hover: #ffffff;
+    --color-action-primary-text: #17140f;
+    --color-action-secondary: rgba(255, 255, 255, 0.06);
+    --color-action-secondary-hover: rgba(255, 255, 255, 0.12);
+    --color-action-destructive: #ff8a70;
+    --color-action-destructive-hover: #ffab98;
+    --color-selected: #3a3026;
+    --color-accent: #6fc7a4;
+    --color-success: #7fd6ab;
+    --color-success-bg: #173226;
+    --color-warning: #f0c35c;
+    --color-warning-bg: #3a2c10;
+    --color-danger: #ff9a7e;
+    --color-danger-bg: #3d1d14;
     --color-info: #8ab8ff;
     --color-info-bg: #15263f;
     --color-gold: #ecc15a;
     --color-gold-bg: #33290f;
-    --color-energy: #86b4ff;
-    --color-energy-bg: #152844;
+    --color-energy: #b7a3ff;
+    --color-energy-bg: #241c45;
     --color-xp: #c3a3f5;
     --color-xp-bg: #2a1d42;
     --color-trophy: #f0a35c;
+    --stage-backlog: #2a251f;
+    --stage-review: #0c0b0a;
     --color-p1: #ff8a80;
     --color-p2: #f0b35c;
     --color-p3: #7fcf9f;
     --color-p4: #a9b3bd;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-    --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
-    --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+    --shadow-drag: 0 30px 50px rgba(0, 0, 0, 0.55);
     --art-grass-1: #5d8a45;
     --art-grass-2: #578341;
     --art-grass-edge: #3c5e2c;
@@ -158,46 +197,55 @@
 }
 
 :root[data-theme="dark"] {
-  --color-page: #101512;
-  --color-surface: #172019;
-  --color-surface-2: #1d2820;
-  --color-surface-sunken: #0c110e;
-  --color-border: #2c3a31;
-  --color-border-strong: #45574b;
-  --color-text: #e6ece6;
-  --color-text-muted: #a3b0a7;
-  --color-text-inverse: #101512;
+  color-scheme: dark;
+  --page-gradient: linear-gradient(135deg, #17140f 0%, #231a14 50%, #12201a 100%);
+  --color-page: #17140f;
+  --color-surface: #221e19;
+  --color-surface-2: #2a251f;
+  --color-surface-sunken: #120f0b;
+  --color-border: #3a332b;
+  --color-border-strong: #54493d;
+  --color-text: #ede6da;
+  --color-text-muted: #a9a196;
+  --color-text-inverse: #17140f;
   --color-focus: #7ab4ff;
-  --color-action-primary: #4cbf9c;
-  --color-action-primary-hover: #6fd3b3;
-  --color-action-primary-text: #0b1a14;
-  --color-action-secondary: #1d2820;
-  --color-action-secondary-hover: #26332a;
-  --color-action-destructive: #ff7b72;
-  --color-action-destructive-hover: #ffa198;
-  --color-selected: #1f3a30;
-  --color-success: #6fd08c;
-  --color-success-bg: #163222;
-  --color-warning: #f0b35c;
-  --color-warning-bg: #3a2a10;
-  --color-danger: #ff8a80;
-  --color-danger-bg: #3d1916;
+  --glass: rgba(42, 37, 31, 0.62);
+  --glass-strong: rgba(48, 42, 35, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --color-action-primary: #ede6da;
+  --color-action-primary-hover: #ffffff;
+  --color-action-primary-text: #17140f;
+  --color-action-secondary: rgba(255, 255, 255, 0.06);
+  --color-action-secondary-hover: rgba(255, 255, 255, 0.12);
+  --color-action-destructive: #ff8a70;
+  --color-action-destructive-hover: #ffab98;
+  --color-selected: #3a3026;
+  --color-accent: #6fc7a4;
+  --color-success: #7fd6ab;
+  --color-success-bg: #173226;
+  --color-warning: #f0c35c;
+  --color-warning-bg: #3a2c10;
+  --color-danger: #ff9a7e;
+  --color-danger-bg: #3d1d14;
   --color-info: #8ab8ff;
   --color-info-bg: #15263f;
   --color-gold: #ecc15a;
   --color-gold-bg: #33290f;
-  --color-energy: #86b4ff;
-  --color-energy-bg: #152844;
+  --color-energy: #b7a3ff;
+  --color-energy-bg: #241c45;
   --color-xp: #c3a3f5;
   --color-xp-bg: #2a1d42;
   --color-trophy: #f0a35c;
+  --stage-backlog: #2a251f;
+  --stage-review: #0c0b0a;
   --color-p1: #ff8a80;
   --color-p2: #f0b35c;
   --color-p3: #7fcf9f;
   --color-p4: #a9b3bd;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --shadow-drag: 0 30px 50px rgba(0, 0, 0, 0.55);
   --art-grass-1: #5d8a45;
   --art-grass-2: #578341;
   --art-grass-edge: #3c5e2c;
