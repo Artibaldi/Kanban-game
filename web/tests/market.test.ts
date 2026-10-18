@@ -16,3 +16,7 @@ test('nothing for nonsense amounts', () => {
   assert.equal(marketQuote('gold', -10, s, 30), 0)
   assert.equal(marketQuote('gold', Number.NaN, s, 30), 0)
 })
+
+test('whole units only: the server takes integers', () => {
+  assert.equal(marketQuote('gold', 100.5, s, 30), 0)
+})

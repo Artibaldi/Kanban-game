@@ -22,7 +22,8 @@ const have = computed(() => (give.value === 'gold' ? props.player.gold : props.p
 // Room left in the store of what you get: a trade that would overflow it is refused.
 const room = computed(() => (give.value === 'gold' ? props.player.energy_cap - props.player.energy : props.player.gold_cap - props.player.gold))
 const block = computed(() => {
-  if (!(amount.value > 0)) return 'Укажите, сколько обменять.'
+  if (props.player.debt) return 'Баланс отрицательный после отмены награды: обмен откроется, когда долг погасят следующие награды.'
+  if (!(amount.value > 0) || !Number.isInteger(amount.value)) return 'Укажите целое число больше нуля.'
   if (amount.value > have.value) return give.value === 'gold' ? 'Недостаточно золота.' : 'Недостаточно энергии.'
   if (got.value < 1) return 'Слишком мало: получится меньше одной единицы.'
   if (got.value > room.value) return 'Столько не поместится в запас.'
@@ -36,9 +37,11 @@ async function trade() {
   if (block.value || busy.value) return
   busy.value = true
   try {
+    const before = props.player
     const p = await api.post<Player>('/city/market', { give: give.value, amount: amount.value })
     game.setPlayer(p)
-    toasts.push({ kind: 'success', title: give.value === 'gold' ? `Получено ${got.value} энергии` : `Получено ${got.value} золота` }, 2500)
+    // The amount the server actually paid, not the local estimate.
+    toasts.push({ kind: 'success', title: give.value === 'gold' ? `Получено ${num(p.energy - before.energy)} энергии` : `Получено ${num(p.gold - before.gold)} золота` }, 2500)
   } catch (e) { toasts.error(e) } finally { busy.value = false }
 }
 </script>
@@ -46,13 +49,13 @@ async function trade() {
 <template>
   <div class="market">
     <h3>Обмен</h3>
-    <div class="seg" role="radiogroup" aria-label="Что отдать">
-      <button role="radio" :aria-checked="give === 'gold'" :class="{ on: give === 'gold' }" @click="flip('gold')"><span class="g-coin" aria-hidden="true" />Золото → энергия</button>
-      <button role="radio" :aria-checked="give === 'energy'" :class="{ on: give === 'energy' }" @click="flip('energy')"><Icon name="zap" :size="14" />Энергия → золото</button>
+    <div class="seg" role="group" aria-label="Что отдать">
+      <button :aria-pressed="give === 'gold'" :class="{ on: give === 'gold' }" @click="flip('gold')"><span class="g-coin" aria-hidden="true" />Золото → энергия</button>
+      <button :aria-pressed="give === 'energy'" :class="{ on: give === 'energy' }" @click="flip('energy')"><Icon name="zap" :size="14" />Энергия → золото</button>
     </div>
     <label class="amount">
       <span>Отдать</span>
-      <input v-model.number="amount" type="number" min="1" :max="have" inputmode="numeric" />
+      <input v-model.number="amount" type="number" min="1" step="1" :max="Math.max(1, have)" inputmode="numeric" />
     </label>
     <div class="presets"><button v-for="p in presets" :key="p" class="chip" @click="amount = p">{{ num(p) }}</button></div>
     <p class="get">Получите <b>{{ num(got) }}</b> {{ give === 'gold' ? 'энергии' : 'золота' }} · комиссия {{ feePct }}%</p>

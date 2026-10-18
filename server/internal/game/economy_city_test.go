@@ -114,3 +114,15 @@ func TestTradeFits(t *testing.T) {
 		t.Fatalf("fills the store exactly: %v", r)
 	}
 }
+
+func TestExchangeNeverOverflows(t *testing.T) {
+	s := DefaultSettings()
+	s.GoldPerPoint = 1e19 // a mistaken admin edit: one energy would be worth more gold than int64 holds
+	m := city(Building{Type: "townhall", Level: 2, X: 7, Y: 7}, Building{Type: "market", Level: 1, X: 3, Y: 3})
+	if dg, _, r := Exchange(s, m, "energy", 10); r == nil || r.Code != "storage_full" {
+		t.Fatalf("an absurd payout is refused, not wrapped: %d %v", dg, r)
+	}
+	if r := TradeFits(m, 1<<62, 0, 1<<62, -1); r == nil || r.Code != "storage_full" {
+		t.Fatalf("no wrap-around past the cap: %v", r)
+	}
+}
