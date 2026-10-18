@@ -154,7 +154,7 @@ func teamDefenseBonus(ctx context.Context, q dbtx, st game.Settings, members []s
 	}
 	var total int64
 	for _, id := range members {
-		city, err := loadCity(ctx, q, id)
+		defense, err := defenseOfPlayer(ctx, q, id)
 		if err != nil {
 			return 0, err
 		}
@@ -162,7 +162,7 @@ func teamDefenseBonus(ctx context.Context, q dbtx, st game.Settings, members []s
 		if err != nil {
 			return 0, err
 		}
-		total += game.DefenseScore(game.DefenseOf(city), army)
+		total += game.DefenseScore(defense, army)
 	}
 	return game.DefenseBonus(st, total/int64(len(members))), nil
 }

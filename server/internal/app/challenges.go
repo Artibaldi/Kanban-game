@@ -217,7 +217,11 @@ func teamForArena(ctx context.Context, q dbtx, a actor) ([]map[string]any, error
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, map[string]any{"user_id": x.id, "display_name": x.name, "townhall": c.TownHall(), "defense": game.DefenseOf(c).Visible(), "accepts_friendly": x.accepts})
+		d, err := defenseOfPlayer(ctx, q, x.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, map[string]any{"user_id": x.id, "display_name": x.name, "townhall": c.TownHall(), "defense": d.Visible(), "accepts_friendly": x.accepts})
 	}
 	return out, nil
 }
@@ -380,12 +384,12 @@ func (s *Server) challengeCity(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	city, err := loadCity(ctx, s.db, def)
+	d, err := defenseOfPlayer(ctx, s.db, def)
 	if err != nil {
 		failErr(w, err)
 		return
 	}
-	out["defense"] = game.DefenseOf(city).Visible()
+	out["defense"] = d.Visible()
 	out["opponent_id"] = def
 	out["challenge"] = c
 	out["opponent_name"] = name

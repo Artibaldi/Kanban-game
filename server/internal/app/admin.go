@@ -108,6 +108,10 @@ func (s *Server) adminPatchUser(w http.ResponseWriter, r *http.Request) {
 			if err := closeChallengesOf(ctx, tx, id); err != nil {
 				return 0, nil, err
 			}
+			// Troops lent by or to them go home.
+			if err := returnReinforcements(ctx, tx, id, false); err != nil {
+				return 0, nil, err
+			}
 		}
 		if team != nil {
 			if err := ensurePlayer(ctx, tx, id); err != nil {
