@@ -46,14 +46,14 @@ export interface Player {
 }
 
 export type DecorType = 'road' | 'tree' | 'flowers' | 'lantern' | 'pond'
-export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | DecorType
+export type BuildingType = 'townhall' | 'barracks' | 'storage' | 'wall' | 'tower' | 'tavern' | 'hut' | 'market' | 'well' | 'archery' | 'workshop' | 'mortar' | 'trap' | 'stable' | 'crossbow' | DecorType
 
 export interface LevelSpec {
   level: number; cost: number; seconds: number; requires_th: number; requires_level?: number
-  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number
+  hp: number; dps?: number; capacity?: number; gold_cap?: number; energy_cap?: number; fee_pct?: number; builders?: number; splash?: number; trap_dmg?: number
 }
 export interface BuildingDef { type: BuildingType; name: string; description: string; max_count: number[]; levels: LevelSpec[]; defense: boolean; decor?: boolean }
-export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number }
+export interface TroopDef { type: string; name: string; role: string; hp: number; attack: number; siege_mult: number; housing: number; cost: number; seconds: number; ranged?: boolean; flank?: boolean }
 
 export interface Settings {
   gold_per_point: number; energy_per_point: number; xp_per_point: number
@@ -81,16 +81,18 @@ export interface City {
   grid?: number; land?: { start: number; size: number }
 }
 
-export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number }
+export interface Defense { wall_hp: number; tower_hp: number; tower_dps: number; towers: number; walls: number; townhall_hp: number; other_hp: number; townhall_level: number
+  mortar_dmg?: number; mortars?: number; trap_dmg?: number; traps?: number; crossbow_dps?: number; crossbows?: number }
 export interface Round {
   n: number; tower_damage: number; killed: Record<string, number>; alive: Record<string, number>
-  wall_damage: number; tower_hit: number; base_damage: number
+  wall_damage: number; tower_hit: number; base_damage: number; mortar_damage?: number; crossbow_damage?: number; trap_damage?: number
   wall_hp: number; tower_hp: number; townhall_hp: number; other_hp: number; events: string[]
 }
 export interface Battle {
   id: string; kind: 'raid' | 'friendly'; attacker_id: string; defender_id: string; attacker: string; defender: string; seed: number
   army: Record<string, number>; losses: Record<string, number>; defense: Defense; rounds: Round[]
   destruction: number; stars: number; gold: number; xp: number; attacker_trophies: number; defender_trophies: number; created_at: string
+  troop_levels?: Record<string, number>
 }
 export interface FeedItem { id: number; actor: string; action: string; target_type: string; target_id: string | null; summary: string; created_at: string }
 

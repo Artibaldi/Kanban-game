@@ -1,5 +1,6 @@
 // The army camp: a yard behind the barracks where trained troops stand in ranks by type.
 // New recruits march in from the gate when their training finishes.
+import { CAMP_ORDER, campCap, campSpot } from '../lib/camp'
 import * as THREE from 'three'
 import { Kit, eOut, rand } from './kit'
 import { buildingModel } from './cityModels'
@@ -7,8 +8,7 @@ import { animateTroop, troopModel } from './troops'
 import { WOOD, WOOD_D } from './fortressWorld'
 
 const ELEV = 0.62, YAW = Math.PI / 4
-const ORDER = ['guard', 'raider', 'ram']
-const MAX_SHOWN = 12
+const ORDER = CAMP_ORDER
 
 interface Soldier { type: string; g: THREE.Group; ph: number; walk?: { from: THREE.Vector3; to: THREE.Vector3; t: number } }
 
@@ -73,7 +73,7 @@ export class CampStage {
   setArmy(troops: Record<string, number>, animate: boolean) {
     const k = this.kit
     ORDER.forEach((type, row) => {
-      const want = Math.min(type === 'ram' ? 8 : MAX_SHOWN, troops[type] || 0)
+      const want = Math.min(campCap(type), troops[type] || 0)
       const mine = this.soldiers.filter(s => s.type === type)
       for (const s of mine.slice(want)) { this.yard.remove(s.g); this.soldiers.splice(this.soldiers.indexOf(s), 1) }
       for (let i = mine.length; i < want; i++) {
@@ -100,15 +100,10 @@ export class CampStage {
     this.shown = true
   }
 
-  /** spot: ranks of four per type, rams at the back. */
-  private spot(type: string, row: number, i: number) {
-    const per = type === 'ram' ? 4 : 6, gap = type === 'ram' ? 2.0 : 1.2
-    const col = i % per, line = Math.floor(i / per)
-    const x = (col - (per - 1) / 2) * gap
-    // Each type has its own block, front to back: guards, raiders, rams.
-    const base = [3.4, 1.0, -1.6][row]
-    const z = base - line * (type === 'ram' ? 1.6 : 1.0)
-    return new THREE.Vector3(x - 1.2, 0, z)
+  /** spot: the figure's place in its type's block (lib/camp). */
+  private spot(type: string, _row: number, i: number) {
+    const p = campSpot(type, i)
+    return new THREE.Vector3(p.x, 0, p.z)
   }
 
   private resize() {

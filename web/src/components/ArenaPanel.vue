@@ -2,6 +2,7 @@
 // The Arena: challenges to friendly duels, opened from the fortress. The challenge is the consent:
 // a colleague accepts it, or posts an open challenge for the team. «Не сейчас» is quiet.
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { defenseLine } from '../lib/city'
 import type { MemberAction } from '../lib/arena'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
@@ -139,7 +140,7 @@ onUnmounted(() => { removeEventListener('keydown', onKey); clearInterval(tick) }
             <span class="av big" :style="{ '--hue': avatarHue(m.display_name) }" aria-hidden="true">{{ initials(m.display_name) }}</span>
             <span class="th g-stroke s2" :title="`Ратуша ${m.townhall}`">{{ m.townhall }}</span>
             <strong>{{ m.display_name }}</strong>
-            <span class="meta">башни {{ m.defense.towers }} · стены {{ m.defense.walls }}</span>
+            <span class="meta">{{ defenseLine(m.defense) }}</span>
             <button v-if="actions[m.user_id].kind === 'challenge'" class="g-btn small" :disabled="!!busy" :aria-busy="busy === 'c:' + m.user_id" @click="challenge(m)"><span>Вызвать</span></button>
             <button v-else-if="actions[m.user_id].kind === 'duel'" class="g-btn yellow small" :disabled="!limitLeft" @click="duel(m)"><span>В бой</span></button>
             <button v-else-if="actions[m.user_id].kind === 'fight'" class="g-btn yellow small" :disabled="!limitLeft" @click="fight((actions[m.user_id] as { id: string }).id)"><span>Вызов принят — в бой</span></button>
