@@ -65,20 +65,14 @@ export function waveRoster(w: { planned: number; closed: number; overdue: number
 }
 
 /**
- * crownSchedule: for each crown the wave earned, the index (in kill order) of the kill that wins it.
- * Crown 1 and 2 come at the thresholds of the plan, crown 3 with the last kill.
+ * crownTargets: for each crown the wave earned, how many defeated points win it. Crowns 1 and 2 come at the
+ * thresholds of the plan, crown 3 with the last defeated point. Points, not kill order: enemies fall in any order.
  */
-export function crownSchedule(roster: Unit[], crowns: number, thresholds: number[]): number[] {
-  const kills = roster.filter(u => u.killed)
-  if (!kills.length || crowns <= 0) return []
+export function crownTargets(roster: Unit[], crowns: number, thresholds: number[]): number[] {
   const planned = roster.reduce((n, u) => n + u.points, 0)
+  const killed = roster.filter(u => u.killed).reduce((n, u) => n + u.points, 0)
+  if (!killed || crowns <= 0) return []
   const out: number[] = []
-  for (let c = 0; c < Math.min(3, crowns); c++) {
-    if (c === 2) { out.push(kills.length - 1); continue }
-    const target = thresholds[c] * planned
-    let sum = 0, at = kills.length - 1
-    for (let i = 0; i < kills.length; i++) { sum += kills[i].points; if (sum >= target - 1e-9) { at = i; break } }
-    out.push(Math.max(at, out.at(-1) ?? 0))
-  }
+  for (let c = 0; c < Math.min(3, crowns); c++) out.push(c === 2 ? killed : Math.min(killed, thresholds[c] * planned))
   return out
 }

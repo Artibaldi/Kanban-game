@@ -31,11 +31,16 @@ const scene = ref<InstanceType<typeof FortressScene3D>>()
 const waveBar = ref<HTMLElement>()
 const glint = ref(false)
 
+// Only the newest response counts: a slow periodic refresh must not bring back an enemy that just fell.
+let loadSeq = 0
 async function load() {
+  const seq = ++loadSeq
   try {
     const [f, w] = await Promise.all([api.get<FortressState>('/fortress'), api.get<{ items: WaveSummary[] }>('/waves')])
+    if (seq !== loadSeq) return
     state.value = f
     waves.value = w.items
+    if (selectedId.value && !f.enemies.some(e => e.task_id === selectedId.value)) selectedId.value = null
   } catch (e) {
     if ((e as ApiError).code === 'not_a_player') noTeam.value = true
     else toasts.error(e)
@@ -68,7 +73,7 @@ async function approve(e: Enemy) {
   busy.value = true
   let task: Task
   try { task = (await api.get<TaskDetail>(`/tasks/${e.task_id}`)).task } catch (err) { toasts.error(err); busy.value = false; return }
-  const r = await moveTask(task, 'done', { undoable: true, after: load })
+  const r = await moveTask(task, 'done', { undoable: true, after: load, anonymous: true })
   busy.value = false
   if (!r) return
   selectedId.value = null
@@ -87,26 +92,48 @@ const thresholds = computed(() => game.config?.settings.crown_thresholds || [0.5
 
 function startBattle(w: WaveSummary) {
   selectedId.value = null
+  scene.value?.endWave()
   battle.value = { wave: w, points: 0, crowns: 0, speed: 1, done: false, shownCrowns: 0, dropped: [] }
+  // The reactive proxy, so identity checks against battle.value hold.
+  const b = battle.value
   try { localStorage.setItem(seenKey.value, w.id) } catch { /* fine */ }
-  scene.value?.playWave({ planned: w.planned || 0, closed: w.closed || 0, overdue: w.overdue || 0, crowns: w.crowns, thresholds: thresholds.value }, {
+  const started = !flat.value && scene.value?.playWave({ planned: w.planned || 0, closed: w.closed || 0, overdue: w.overdue || 0, crowns: w.crowns, thresholds: thresholds.value }, {
     onProgress: p => { if (battle.value) battle.value.points = p },
     onCrown: n => { if (battle.value) battle.value.crowns = n },
     onWallHit: () => {},
     onDone: () => {
-      const b = battle.value
-      if (!b) return
-      b.done = true
-      // The result panel drops the crowns one by one.
-      const drop = (i: number) => { if (!battle.value || i >= b.wave.crowns) return; battle.value.shownCrowns = i + 1; setTimeout(() => drop(i + 1), reduced() ? 0 : 420) }
-      setTimeout(() => drop(0), reduced() ? 0 : 600)
+      if (battle.value !== b) return
+      showResult(b)
     },
   })
-  if (flat.value) battle.value.done = true
+  // No 3D scene (flat fallback, or still loading): go straight to the result with the wave's numbers.
+  if (!started) { b.points = w.closed || 0; b.crowns = w.crowns; showResult(b) }
+}
+function showResult(b: NonNullable<typeof battle.value>) {
+  b.done = true
+  // The result panel drops the crowns one by one; a newer run stops the old timers.
+  const drop = (i: number) => { if (battle.value !== b || i >= b.wave.crowns) return; b.shownCrowns = i + 1; setTimeout(() => drop(i + 1), reduced() ? 0 : 420) }
+  setTimeout(() => drop(0), reduced() ? 0 : 600)
+  nextTick(() => document.querySelector<HTMLElement>('.result .g-btn:last-child')?.focus())
 }
 function speed() { const b = battle.value; if (!b) return; b.speed = b.speed === 1 ? 2 : 1; scene.value?.setSpeed(b.speed) }
 function skip() { scene.value?.finishWave() }
 function closeBattle() { scene.value?.endWave(); battle.value = null }
+// Escape closes the topmost game panel; focus moves into a panel when it opens and back when it closes.
+let opener: HTMLElement | null = null
+function select(id: string | null) {
+  if (id && !selectedId.value) opener = document.activeElement as HTMLElement
+  selectedId.value = id
+  if (id) nextTick(() => document.querySelector<HTMLElement>('.enemy-panel .g-x')?.focus())
+}
+function closePanel() { selectedId.value = null; opener?.focus?.(); opener = null }
+function onKey(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return
+  if (battle.value?.done) closeBattle()
+  else if (selectedId.value) closePanel()
+}
+onMounted(() => addEventListener('keydown', onKey))
+onUnmounted(() => removeEventListener('keydown', onKey))
 const chest = computed(() => {
   const s = game.config?.settings, c = battle.value?.wave.crowns ?? 0
   if (!s) return null
@@ -126,8 +153,8 @@ const resultTitle = computed(() => {
     <template v-else-if="state">
       <section class="arena" :class="{ battle: !!battle }" aria-label="Крепость команды">
         <FortressScene3D v-if="!flat" ref="scene" :hp="state.fortress.hp" :fog="state.fog" :enemies="enemies" :selected-id="selectedId" :memory-key="memoryKey"
-          @select="id => (selectedId = id)" @gone="onGone" @unavailable="flat = true" />
-        <div v-else class="flat"><FortressScene :fortress="state.fortress" :rows="enemyRows(enemies)" :fog="state.fog" :selected-id="selectedId" @select="e => (selectedId = e.task_id)" /></div>
+          @select="select" @gone="onGone" @unavailable="flat = true" />
+        <div v-else class="flat"><FortressScene :fortress="state.fortress" :rows="enemyRows(enemies)" :fog="state.fog" :selected-id="selectedId" @select="e => select(e.task_id)" /></div>
 
         <div class="hud">
           <div class="g-box hp-box" :title="`Прочность крепости: ${state.fortress.hp}%`">
@@ -194,7 +221,7 @@ const resultTitle = computed(() => {
         <div v-if="selected && !battle" class="enemy-panel" role="dialog" aria-modal="false" :aria-label="`${enemyName(selected.kind)}: ${selected.title}`">
           <div class="g-panel pop">
             <span class="g-ribbon" :class="{ red: selected.overdue }"><b>{{ enemyName(selected.kind) }}</b></span>
-            <button class="g-x" aria-label="Закрыть" @click="selectedId = null"><Icon name="x" :size="18" /></button>
+            <button class="g-x" aria-label="Закрыть" @click="closePanel"><Icon name="x" :size="18" /></button>
             <div class="task">
               <div class="pts" :class="{ due: selected.overdue }"><b class="g-stroke">{{ selected.points }}</b><small class="g-stroke s2">{{ plural(selected.points, 'очко', 'очка', 'очков') }}</small></div>
               <div class="grow">
@@ -218,7 +245,7 @@ const resultTitle = computed(() => {
 
       <!-- The same horde for screen readers and keyboards: the 3D scene is decorative. -->
       <section class="sr-only" aria-label="Враги на поле">
-        <ul><li v-for="e in enemies" :key="e.task_id"><button @click="selectedId = e.task_id">{{ enemyName(e.kind) }}, {{ e.points }} очк.: {{ e.number }} {{ e.title }}{{ e.overdue ? ', просрочена' : '' }}</button></li></ul>
+        <ul><li v-for="e in enemies" :key="e.task_id"><button @click="select(e.task_id)">{{ enemyName(e.kind) }}, {{ e.points }} очк.: {{ e.number }} {{ e.title }}{{ e.overdue ? ', просрочена' : '' }}</button></li></ul>
       </section>
 
       <section class="card panel stack waves-card">

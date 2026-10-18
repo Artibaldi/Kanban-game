@@ -15,11 +15,11 @@ export class Kit {
   private mats = new Map<string, THREE.Material>()
   private geos = new Map<string, THREE.BufferGeometry>()
   private textures: THREE.Texture[] = []
-  private extra: { dispose(): void }[] = []
+  private extra = new Set<{ dispose(): void }>()
   private grad: THREE.DataTexture
   readonly blobTex: THREE.Texture
   readonly glowTex: THREE.Texture
-  private tweens: { t: number; dur: number; fn: (k: number) => void; done?: () => void }[] = []
+  private tweens: { t: number; dur: number; fn: (k: number) => void; done?: () => void; tag?: string }[] = []
   private parts: { m: THREE.Mesh; v: THREE.Vector3; life: number; max: number; s0: number; s1: number; drag: number; g: number; fade: boolean; spin: boolean }[] = []
   private flags: { g: THREE.BufferGeometry; base: Float32Array; w: number; e: THREE.Object3D; ph: number }[] = []
 
@@ -53,7 +53,7 @@ export class Kit {
   }
   /** Unlit material (not cached when it is changed per object, e.g. opacity). */
   MB(color: number, ex?: THREE.MeshBasicMaterialParameters, own = false): THREE.MeshBasicMaterial {
-    if (own) { const m = new THREE.MeshBasicMaterial({ color, ...ex }); this.extra.push(m); return m }
+    if (own) { const m = new THREE.MeshBasicMaterial({ color, ...ex }); this.extra.add(m); return m }
     const k = 'b' + color + (ex ? JSON.stringify(ex, (key, v) => (key === 'map' ? (v as THREE.Texture).uuid : v)) : '')
     let m = this.mats.get(k)
     if (!m) { m = new THREE.MeshBasicMaterial({ color, ...ex }); this.mats.set(k, m) }
@@ -106,7 +106,7 @@ export class Kit {
   }
   glow(color: number, size: number, op = 1) {
     const mat = new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })
-    this.extra.push(mat)
+    this.extra.add(mat)
     const s = new THREE.Sprite(mat)
     s.scale.setScalar(size)
     return s
@@ -134,7 +134,7 @@ export class Kit {
     this.mk(this.sph(0.07, 8, 6), this.M(0xffd323), x, y + h * 2.2 + 0.05, z, p)
     const g = new THREE.PlaneGeometry(w, h, 10, 3)
     g.translate(w / 2, 0, 0)
-    this.extra.push(g)
+    this.extra.add(g)
     const m = this.mk(g, this.M(color, { side: THREE.DoubleSide }), x, y + h * 2.2 - h / 2 - 0.05, z, p)
     const e = this.mk(this.rb(h * 0.34, h * 0.34, 0.03, 0.02), this.M(emblem), w * 0.5, 0, 0.02, m)
     e.rotation.z = Math.PI / 4
@@ -148,21 +148,24 @@ export class Kit {
     scene.add(d)
   }
 
-  /** tween: runs fn(0…1) over `dur` seconds; without motion it jumps to the end. */
-  tween(dur: number, fn: (k: number) => void, done?: () => void) {
+  /** tween: runs fn(0…1) over `dur` seconds; without motion it jumps to the end. A tag lets a group be cancelled. */
+  tween(dur: number, fn: (k: number) => void, done?: () => void, tag?: string) {
     if (this.reduced || dur <= 0) { fn(1); done?.(); return }
-    this.tweens.push({ t: 0, dur, fn, done })
+    this.tweens.push({ t: 0, dur, fn, done, tag })
   }
-  wait(s: number, f: () => void) {
+  wait(s: number, f: () => void, tag?: string) {
     if (this.reduced) { f(); return }
-    this.tweens.push({ t: 0, dur: s, fn: () => {}, done: f })
+    this.tweens.push({ t: 0, dur: s, fn: () => {}, done: f, tag })
   }
+  /** cancel: drops the tweens of one group (e.g. a finished wave replay) without running them. */
+  cancel(tag: string) { this.tweens = this.tweens.filter(w => w.tag !== tag) }
+  /** release: frees an owned material or geometry now instead of at unmount. */
+  release(x: { dispose(): void } | null | undefined) { if (x && this.extra.delete(x)) x.dispose() }
 
   poof(p: THREE.Object3D, pos: THREE.Vector3, s = 1, n = 5) {
     if (this.reduced) return
     for (let i = 0; i < n; i++) {
-      const m = this.mk(this.sph(0.3, 10, 8), this.M(0xffffff, { transparent: true, opacity: 1 }).clone(), pos.x, pos.y, pos.z, p)
-      this.extra.push(m.material as THREE.Material)
+      const m = this.mk(this.sph(0.3, 10, 8), this.MB(0xffffff, { transparent: true, opacity: 1 }, true), pos.x, pos.y, pos.z, p)
       const a = (i / n) * Math.PI * 2 + rand()
       this.parts.push({ m, v: new THREE.Vector3(Math.cos(a) * 1.6 * s, 1 + rand() * 1.2, Math.sin(a) * 1.6 * s), life: 0, max: 0.55 + rand() * 0.2, s0: 0.4 * s, s1: 1.2 * s, drag: 3, g: 0, fade: true, spin: false })
     }
@@ -196,7 +199,7 @@ export class Kit {
       const q = this.parts[i]
       q.life += dt
       const k = q.life / q.max
-      if (k >= 1) { q.m.parent?.remove(q.m); if (q.fade) (q.m.material as THREE.Material).dispose(); this.parts.splice(i, 1); continue }
+      if (k >= 1) { q.m.parent?.remove(q.m); if (q.fade) this.release(q.m.material as THREE.Material); this.parts.splice(i, 1); continue }
       q.v.y -= q.g * dt
       q.v.multiplyScalar(1 - Math.min(1, q.drag * dt))
       q.m.position.addScaledVector(q.v, dt)
@@ -224,6 +227,6 @@ export class Kit {
     for (const g of this.geos.values()) g.dispose()
     for (const t of this.textures) t.dispose()
     for (const x of this.extra) x.dispose()
-    this.mats.clear(); this.geos.clear(); this.tweens.length = 0; this.parts.length = 0; this.flags.length = 0
+    this.mats.clear(); this.geos.clear(); this.extra.clear(); this.tweens.length = 0; this.parts.length = 0; this.flags.length = 0
   }
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { LANES, WALL_Z, chunkPoints, crownSchedule, layoutHorde, waveRoster } from '../src/lib/horde.ts'
+import { LANES, WALL_Z, chunkPoints, crownTargets, layoutHorde, waveRoster } from '../src/lib/horde.ts'
 import type { Enemy } from '../src/types.ts'
 
 const e = (id: string, row: number, extra: Partial<Enemy> = {}) => ({ task_id: id, row, points: 3, kind: 'knight', overdue: false, at_gates: false, ...extra }) as Enemy
@@ -41,15 +41,11 @@ test('a wave roster defeats exactly the closed points and sends the overdue to t
   assert.deepEqual(waveRoster({ planned: 0, closed: 0, overdue: 0 }), [])
 })
 
-test('crowns arrive at the kill that crosses each threshold, and only as many as the wave earned', () => {
+test('crowns arrive when the defeated points cross each threshold, in whatever order enemies fall', () => {
   const r = waveRoster({ planned: 30, closed: 24, overdue: 1 })
-  const at = crownSchedule(r, 2, [0.5, 0.8])
-  assert.equal(at.length, 2)
-  const kills = r.filter(u => u.killed)
-  const upto = (i: number) => kills.slice(0, i + 1).reduce((n, u) => n + u.points, 0)
-  assert.ok(upto(at[0]) >= 15 && (at[0] === 0 || upto(at[0] - 1) < 15))
-  assert.ok(upto(at[1]) >= 24)
+  assert.deepEqual(crownTargets(r, 2, [0.5, 0.8]), [15, 24])
   const all = waveRoster({ planned: 10, closed: 10, overdue: 0 })
-  assert.equal(crownSchedule(all, 3, [0.5, 0.8]).at(-1), all.filter(u => u.killed).length - 1, 'the third crown is the last kill')
-  assert.deepEqual(crownSchedule(r, 0, [0.5, 0.8]), [])
+  assert.deepEqual(crownTargets(all, 3, [0.5, 0.8]), [5, 8, 10], 'the third crown needs every defeated point')
+  assert.deepEqual(crownTargets(r, 0, [0.5, 0.8]), [])
+  assert.deepEqual(crownTargets(waveRoster({ planned: 0, closed: 0, overdue: 0 }), 1, [0.5, 0.8]), [])
 })

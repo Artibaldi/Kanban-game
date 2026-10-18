@@ -16,6 +16,8 @@ export interface MoveOptions {
   after?: () => void
   /** Keep quiet about plain moves (the caller shows its own feedback). */
   quiet?: boolean
+  /** Do not name the assignee (game screens: nobody is named next to an enemy). */
+  anonymous?: boolean
 }
 
 /** moveTask performs a transition and tells the user what happened to the reward. */
@@ -47,10 +49,10 @@ export async function moveTask(task: Task, to: TaskState, opts: MoveOptions = {}
     if (r.reward) {
       toasts.push({
         kind: session.gameOn ? 'reward' : 'success',
-        title: session.gameOn ? `+${r.reward.gold} золота: ${r.reward.assignee}` : `${task.number} подтверждена · в «Выполнено»`,
+        title: session.gameOn ? (opts.anonymous ? `+${r.reward.gold} золота исполнителю` : `+${r.reward.gold} золота: ${r.reward.assignee}`) : `${task.number} подтверждена · в «Выполнено»`,
         text: session.gameOn
           ? `${task.number} подтверждена: +${r.reward.energy} энергии, +${r.reward.xp} опыта` + (r.reward.gold < r.reward.gold_formula ? ' (часть не поместилась в хранилище)' : '')
-          : `${r.reward.assignee}: +${r.reward.points} балл.`,
+          : opts.anonymous ? `+${r.reward.points} балл. к волне` : `${r.reward.assignee}: +${r.reward.points} балл.`,
         action,
       }, 7000)
     } else if (r.reversal) {

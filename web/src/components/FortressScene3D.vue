@@ -11,6 +11,7 @@ const canvas = ref<HTMLCanvasElement>()
 const labels = ref<HTMLElement>()
 const stage = shallowRef<FortressStage | null>(null)
 const failed = ref(false)
+let unmounted = false
 
 type Memo = Pick<Enemy, 'task_id' | 'kind' | 'points' | 'row' | 'overdue' | 'at_gates' | 'state' | 'number' | 'title' | 'priority' | 'due_date' | 'mine'>
 function remember(list: Enemy[]) {
@@ -32,9 +33,12 @@ const onGone = (e: Enemy, [x, y]: [number, number]) => {
 onMounted(async () => {
   try {
     const mod = await import('../game3d/fortressStage')
+    if (unmounted) return
     if (!mod.webglAvailable() || !canvas.value || !labels.value) throw new Error('no webgl')
     const s = new mod.FortressStage(canvas.value, labels.value, reduced())
     s.onPick = id => emit('select', id)
+    // A lost GPU context (driver reset, too many tabs) falls back to the flat scene.
+    s.onLost = () => { failed.value = true; emit('unavailable') }
     s.setFortress(props.hp, props.fog)
     // Last visit's horde first, then today's: the difference walks in or falls.
     const before = recall()
@@ -47,11 +51,12 @@ onMounted(async () => {
     stage.value = s
     emit('ready')
   } catch {
+    if (unmounted) return
     failed.value = true
     emit('unavailable')
   }
 })
-onUnmounted(() => { stage.value?.dispose(); stage.value = null })
+onUnmounted(() => { unmounted = true; stage.value?.dispose(); stage.value = null })
 
 watch(() => props.enemies, (list, old) => {
   const s = stage.value
@@ -63,7 +68,8 @@ watch(() => [props.hp, props.fog] as const, ([hp, fog]) => stage.value?.setFortr
 watch(() => props.selectedId, id => stage.value?.select(id ?? null))
 
 defineExpose({
-  playWave: (w: WaveInput, ev: WaveEvents) => stage.value?.playWave(w, ev),
+  /** playWave: false when the scene is not ready (still loading or unavailable). */
+  playWave: (w: WaveInput, ev: WaveEvents) => stage.value?.playWave(w, ev) ?? false,
   setSpeed: (x: number) => stage.value?.setSpeed(x),
   finishWave: () => stage.value?.finishWave(),
   endWave: () => stage.value?.endWave(),
