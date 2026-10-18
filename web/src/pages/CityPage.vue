@@ -4,7 +4,7 @@ import Icon from '../ui/Icon.vue'
 import CityScene from '../components/CityScene.vue'
 import CityScene3D from '../components/CityScene3D.vue'
 import GameOff from '../components/GameOff.vue'
-import BuildingIcon from '../components/BuildingIcon.vue'
+import Portrait3D from '../components/Portrait3D.vue'
 import { api } from '../api'
 import { placeBlock, specLines, upgradeBlock } from '../lib/city'
 import { duration, num } from '../lib/format'
@@ -154,7 +154,7 @@ const left = (b: CityBuilding) => (b.busy_until ? new Date(b.busy_until).getTime
           <ul v-if="city && player" class="build-list">
             <li v-for="d in defs" :key="d.type">
               <button class="build" :class="{ on: placing === d.type }" :disabled="!!placeBlock(d, city, player, builders)" :aria-pressed="placing === d.type" @click="startPlacing(d.type)">
-                <BuildingIcon :type="d.type" />
+                <Portrait3D :building="d.type" :size="52" :faded="!!placeBlock(d, city, player, builders)" />
                 <span class="grow">
                   <strong>{{ d.name }}</strong>
                   <span class="meta">{{ city.limits[d.type]?.built }}/{{ city.limits[d.type]?.allowed }} · {{ specLines(d.type, d.levels[0]).slice(0, 2).join(' · ') }}</span>

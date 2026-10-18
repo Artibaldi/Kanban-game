@@ -49,7 +49,7 @@ export function troopPortrait(type: string): string | null {
   if (cache.has(key)) return cache.get(key)!
   try {
     const { k } = setup()
-    const url = shoot(troopModel(k, type), 0.95)
+    const url = shoot(troopModel(k, type), 0.72)
     cache.set(key, url)
     return url
   } catch { return null }
