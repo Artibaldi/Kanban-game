@@ -19,18 +19,21 @@ type TroopDef struct {
 	Seconds   int     `json:"seconds"` // training time per unit
 	// Ranged troops shoot over the walls at what stands behind them.
 	Ranged bool `json:"ranged,omitempty"`
+	// Flank troops ride around the walls and strike the towers first.
+	Flank bool `json:"flank,omitempty"`
 }
 
-// Troop types; the archer needs an archery range.
+// Troop types; the archer needs an archery range, the rider a stable.
 var Troops = map[string]TroopDef{
 	"guard":  {Type: "guard", Name: "Страж", Role: "Сбалансированный боец", HP: 100, Attack: 20, SiegeMult: 0.8, Housing: 1, Cost: 8, Seconds: 2},
 	"raider": {Type: "raider", Name: "Налётчик", Role: "Сильная атака, слабая защита", HP: 45, Attack: 42, SiegeMult: 0.35, Housing: 1, Cost: 10, Seconds: 3},
 	"archer": {Type: "archer", Name: "Лучник", Role: "Стреляет через стены, хрупкий", HP: 35, Attack: 26, SiegeMult: 0.5, Housing: 1, Cost: 12, Seconds: 4, Ranged: true},
+	"rider":  {Type: "rider", Name: "Всадник", Role: "Быстрый: объезжает стены и первым бьёт по башням", HP: 110, Attack: 30, SiegeMult: 1, Housing: 2, Cost: 22, Seconds: 6, Flank: true},
 	"ram":    {Type: "ram", Name: "Таран", Role: "Разрушает укрепления", HP: 150, Attack: 10, SiegeMult: 6, Housing: 2, Cost: 18, Seconds: 6},
 }
 
 // TroopOrder is the display and battle order.
-var TroopOrder = []string{"guard", "raider", "archer", "ram"}
+var TroopOrder = []string{"guard", "raider", "archer", "rider", "ram"}
 
 func TrainDuration(s Settings, t TroopDef, count int) time.Duration {
 	return time.Duration(math.Round(float64(t.Seconds*count)*s.TimeScale*1000)) * time.Millisecond
@@ -61,6 +64,9 @@ type Defense struct {
 	// Traps fire once, at the start of a battle, and are never shown to a rival before it.
 	TrapDmg int `json:"trap_dmg,omitempty"`
 	Traps   int `json:"traps,omitempty"`
+	// Crossbow towers aim at heavy units (rams, riders); their hit points are part of TowerHP.
+	CrossbowDPS int `json:"crossbow_dps,omitempty"`
+	Crossbows   int `json:"crossbows,omitempty"`
 }
 
 // Visible is the defence as a rival sees it before a battle: everything but the traps.
@@ -89,6 +95,10 @@ func DefenseOf(c City) Defense {
 			d.TowerHP += spec.HP
 			d.MortarDmg += spec.Splash
 			d.Mortars++
+		case "crossbow":
+			d.TowerHP += spec.HP
+			d.CrossbowDPS += spec.DPS
+			d.Crossbows++
 		case "trap":
 			d.TrapDmg += spec.TrapDmg
 			d.Traps++
@@ -102,20 +112,21 @@ func DefenseOf(c City) Defense {
 }
 
 type Round struct {
-	N            int            `json:"n"`
-	TowerDamage  int            `json:"tower_damage"`
-	MortarDamage int            `json:"mortar_damage,omitempty"`
-	TrapDamage   int            `json:"trap_damage,omitempty"`
-	Killed       map[string]int `json:"killed"`
-	Alive        map[string]int `json:"alive"`
-	WallDamage   int            `json:"wall_damage"`
-	TowerHit     int            `json:"tower_hit"`
-	BaseDamage   int            `json:"base_damage"`
-	WallHP       int            `json:"wall_hp"`
-	TowerHP      int            `json:"tower_hp"`
-	TownHallHP   int            `json:"townhall_hp"`
-	OtherHP      int            `json:"other_hp"`
-	Events       []string       `json:"events"`
+	N              int            `json:"n"`
+	TowerDamage    int            `json:"tower_damage"`
+	MortarDamage   int            `json:"mortar_damage,omitempty"`
+	CrossbowDamage int            `json:"crossbow_damage,omitempty"`
+	TrapDamage     int            `json:"trap_damage,omitempty"`
+	Killed         map[string]int `json:"killed"`
+	Alive          map[string]int `json:"alive"`
+	WallDamage     int            `json:"wall_damage"`
+	TowerHit       int            `json:"tower_hit"`
+	BaseDamage     int            `json:"base_damage"`
+	WallHP         int            `json:"wall_hp"`
+	TowerHP        int            `json:"tower_hp"`
+	TownHallHP     int            `json:"townhall_hp"`
+	OtherHP        int            `json:"other_hp"`
+	Events         []string       `json:"events"`
 }
 
 type Outcome struct {
@@ -174,12 +185,23 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 		}
 		return n
 	}
-	// hurt spreads incoming damage over the troops: by their share of hit points, or by head count (splash).
-	hurt := func(round *Round, incoming float64, byCount bool) {
+	// hurt spreads incoming damage over the troops: by their share of hit points, by head count (splash), or by
+	// hit points with heavy units (two housing places or more) three times as likely to be hit (crossbow bolts).
+	const (
+		byHP = iota
+		byCount
+		byHeavy
+	)
+	hurt := func(round *Round, incoming float64, mode int) {
 		var pool float64
 		weight := func(k string) float64 {
-			if byCount {
+			switch mode {
+			case byCount:
 				return float64(alive[k])
+			case byHeavy:
+				if Troops[k].Housing >= 2 {
+					return 3 * float64(alive[k]) * hp[k]
+				}
 			}
 			return float64(alive[k]) * hp[k]
 		}
@@ -210,20 +232,27 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 		incoming := float64(d.TowerDPS) * towerHealth() * 3 * roll()
 		round.TowerDamage = int(math.Round(incoming))
 		if incoming > 0 {
-			hurt(&round, incoming, false)
+			hurt(&round, incoming, byHP)
+		}
+		if d.CrossbowDPS > 0 && count() > 0 {
+			bolts := float64(d.CrossbowDPS) * towerHealth() * 3 * roll()
+			round.CrossbowDamage = int(math.Round(bolts))
+			if bolts > 0 {
+				hurt(&round, bolts, byHeavy)
+			}
 		}
 		if d.MortarDmg > 0 && count() > 0 {
 			splash := float64(d.MortarDmg) * float64(min(count(), MortarSplash)) * 2 * towerHealth() * roll()
 			round.MortarDamage = int(math.Round(splash))
 			if splash > 0 {
-				hurt(&round, splash, true)
+				hurt(&round, splash, byCount)
 			}
 		}
 		// Traps spring once, as the troops come in.
 		if r == 1 && d.TrapDmg > 0 && count() > 0 {
 			trap := float64(d.TrapDmg) * roll()
 			round.TrapDamage = int(math.Round(trap))
-			hurt(&round, trap, false)
+			hurt(&round, trap, byHP)
 			round.Events = append(round.Events, "trap_sprung")
 		}
 		// 2. Survivors strike: walls first, then towers, then the town hall and other buildings.
@@ -233,8 +262,8 @@ func Fight(army, levels map[string]int, d Defense, seed int64, spread float64) O
 			}
 			t := Troops[k]
 			hit := float64(alive[k]*t.Attack) * TroopMult(levels[k]) * roll()
-			// Walls; ranged troops shoot over them.
-			if wall > 0 && !t.Ranged {
+			// Walls; ranged troops shoot over them, flank troops ride around them.
+			if wall > 0 && !t.Ranged && !t.Flank {
 				dmg := hit * t.SiegeMult
 				used := math.Min(dmg, wall)
 				wall -= used
@@ -314,7 +343,7 @@ func SortedTypes(army map[string]int) []string {
 	for k := range army {
 		out = append(out, k)
 	}
-	order := map[string]int{"guard": 0, "raider": 1, "archer": 2, "ram": 3}
+	order := map[string]int{"guard": 0, "raider": 1, "archer": 2, "rider": 3, "ram": 4}
 	sort.Slice(out, func(i, j int) bool { return order[out[i]] < order[out[j]] })
 	return out
 }

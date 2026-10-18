@@ -29,10 +29,13 @@ func MaxTroopLevel(c City) int {
 	return min(MaxTroopTop, 1+c.finishedLevel("workshop"))
 }
 
-// CanTrain: archers need a finished archery range; the rest need only the barracks.
+// CanTrain: archers need a finished archery range, riders a stable; the rest need only the barracks.
 func CanTrain(c City, kind string) *Refusal {
 	if kind == "archer" && c.finishedLevel("archery") == 0 {
 		return refuse("no_archery", "Лучников учат на стрельбище. Постройте его в городе.")
+	}
+	if kind == "rider" && c.finishedLevel("stable") == 0 {
+		return refuse("no_stable", "Всадников готовят в конюшне. Постройте её в городе (ратуша 4).")
 	}
 	return nil
 }

@@ -111,3 +111,17 @@ func TestTrapsStayOutOfTheTeamFeed(t *testing.T) {
 		t.Fatalf("the owner sees their own trap events: %d", seen(alexey))
 	}
 }
+
+func TestStableTrainsRiders(t *testing.T) {
+	ts, pool, _ := testServer(t)
+	alexey := login(t, ts, "alexey")
+	if l := alexey.must(200, "GET", "/army", nil, "").Body["locked"].(map[string]any); l["rider"] == nil {
+		t.Fatalf("riders need a stable: %v", l)
+	}
+	alexey.refused("no_stable", "POST", "/army/train", map[string]any{"type": "rider", "count": 1})
+	if _, err := pool.Exec(context.Background(), `INSERT INTO buildings(user_id,type,level,x,y) SELECT id,'stable',1,1,1 FROM users WHERE login='alexey'
+	 UNION ALL SELECT id,'crossbow',1,2,1 FROM users WHERE login='alexey'`); err != nil {
+		t.Fatal(err)
+	}
+	alexey.must(201, "POST", "/army/train", map[string]any{"type": "rider", "count": 1}, "")
+}
