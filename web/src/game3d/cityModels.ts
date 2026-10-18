@@ -240,6 +240,158 @@ function well(k: Kit, g: THREE.Group, level: number, live: Live) {
   live.glows.push(gl)
 }
 
+/** Archery range: a fenced yard with straw targets and a weapon rack; a roofed stand from level 2, banners at 3. */
+function archery(k: Kit, g: THREE.Group, level: number) {
+  k.mk(k.rb(1.7, 0.08, 1.4, 0.04), k.M(0xc9b48c), 0, 0.05, 0, g)
+  for (const [x, z, ry] of [[-0.85, 0, 0], [0.85, 0, 0], [0, -0.7, Math.PI / 2]] as const) {
+    const F = k.grp(g, x, 0, z)
+    F.rotation.y = ry
+    for (const dz of [-0.55, 0, 0.55]) k.mk(k.cyl(0.03, 0.03, 0.4, 6), k.M(WOOD_D), 0, 0.2, dz, F)
+    k.mk(k.rb(0.04, 0.04, 1.2, 0.01), k.M(WOOD), 0, 0.32, 0, F)
+  }
+  // Round straw targets with red rings.
+  for (const x of [-0.4, 0.35]) {
+    const T = k.grp(g, x, 0, -0.4)
+    for (const s of [-1, 1]) k.mk(k.cyl(0.025, 0.025, 0.7, 5), k.M(WOOD_D), s * 0.15, 0.32, -0.08, T).rotation.x = 0.25
+    k.mk(k.cyl(0.26, 0.26, 0.1, 16), k.M(STRAW), 0, 0.55, 0, T).rotation.x = Math.PI / 2 - 0.15
+    k.mk(k.cyl(0.17, 0.17, 0.11, 16), k.M(0xf2f2f2), 0, 0.55, 0.005, T).rotation.x = Math.PI / 2 - 0.15
+    k.mk(k.cyl(0.08, 0.08, 0.12, 12), k.M(0xd0453a), 0, 0.55, 0.01, T).rotation.x = Math.PI / 2 - 0.15
+    k.mk(k.cyl(0.01, 0.01, 0.3, 4), k.M(WOOD), 0.05, 0.6, 0.15, T).rotation.x = Math.PI / 2
+  }
+  // A rack of bows.
+  const R = k.grp(g, 0.3, 0, 0.45)
+  k.mk(k.rb(0.7, 0.05, 0.08, 0.02), k.M(WOOD_D), 0, 0.55, 0, R)
+  for (const x of [-0.3, 0.3]) k.mk(k.cyl(0.03, 0.03, 0.55, 5), k.M(WOOD_D), x, 0.27, 0, R)
+  for (const x of [-0.18, 0, 0.18]) k.mk(k.geo('bow', () => new THREE.TorusGeometry(0.42, 0.025, 6, 16, Math.PI)), k.M(WOOD), x, 0.35, 0.05, R).scale.setScalar(0.45)
+  if (level >= 2) {
+    const S = k.grp(g, -0.45, 0, 0.4)
+    for (const [x, z] of [[-0.3, -0.2], [0.3, -0.2], [-0.3, 0.2], [0.3, 0.2]]) k.mk(k.cyl(0.03, 0.03, 0.8, 6), k.M(WOOD_D), x, 0.4, z, S)
+    k.mk(gable(k, 0.6, 0.3, 0.8), k.M(level >= 3 ? TILE : STRAW), 0, 0.8, 0, S)
+  }
+  if (level >= 3) for (const x of [-0.85, 0.85]) k.flag(g, x, 0.4, 0.6, 0.45, 0.26, 0x4f9a3a, GOLD)
+}
+
+/** Workshop: a stone smithy with a big gear on the wall, an anvil and a glowing forge; metal roof trim by level. */
+function workshop(k: Kit, g: THREE.Group, level: number, live: Live) {
+  const H = k.grp(g)
+  H.rotation.y = 0.3
+  const w = 1.5, d = 1.15, wh = 0.75
+  k.mk(k.rb(w + 0.2, 0.16, d + 0.2, 0.06), k.M(STONE_D), 0, 0.1, 0, H)
+  k.mk(k.rb(w, wh, d, 0.1), k.M(STONE), 0, 0.18 + wh / 2, 0, H)
+  k.mk(gable(k, d + 0.4, 0.6, w + 0.3), k.M(level >= 3 ? METAL : TILE), 0, 0.18 + wh + 0.02, 0, H).rotation.y = Math.PI / 2
+  k.mk(k.rb(0.5, 0.55, 0.08, 0.05), k.M(0x5a3418), 0.35, 0.46, d / 2 + 0.02, H)
+  // The gear.
+  const G = k.grp(H, -0.35, 0.62, d / 2 + 0.06)
+  k.mk(k.cyl(0.22, 0.22, 0.06, 16), k.M(METAL), 0, 0, 0, G).rotation.x = Math.PI / 2
+  for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; k.mk(k.rb(0.08, 0.08, 0.06, 0.01), k.M(METAL), Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0, G).rotation.z = a }
+  k.mk(k.cyl(0.07, 0.07, 0.08, 10), k.M(GOLD), 0, 0, 0.01, G).rotation.x = Math.PI / 2
+  // Chimney with smoke, and a forge glowing under it.
+  k.mk(k.rb(0.26, 0.6, 0.26, 0.04), k.M(STONE_D), w / 2 - 0.25, 0.18 + wh + 0.4, -0.2, H)
+  const chim = k.grp(H, w / 2 - 0.25, 0.18 + wh + 0.75, -0.2)
+  live.smoke.push(chim)
+  // Anvil outside.
+  const A = k.grp(g, 0.95, 0, 0.55)
+  k.mk(k.cyl(0.12, 0.16, 0.3, 8), k.M(WOOD_D), 0, 0.15, 0, A)
+  k.mk(k.rb(0.36, 0.12, 0.16, 0.03), k.M(0x4a4a58), 0, 0.36, 0, A)
+  k.mk(k.cone(0.06, 0.16, 6), k.M(0x4a4a58), 0.24, 0.36, 0, A).rotation.z = -Math.PI / 2
+  const fire = k.glow(0xff8a3a, 0.9, 0.6)
+  fire.position.set(0.95, 0.5, 0.55)
+  g.add(fire)
+  live.glows ??= []
+  live.glows.push(fire)
+}
+
+/** Mortar: a squat stone emplacement with a fat iron barrel aimed at the sky; bands and a bigger barrel by level. */
+function mortar(k: Kit, g: THREE.Group, level: number) {
+  const r = 0.7
+  k.mk(k.cyl(r + 0.1, r + 0.16, 0.2, 10), k.M(STONE_D), 0, 0.1, 0, g)
+  k.mk(k.cyl(r, r + 0.04, 0.4, 10), k.M(level >= 2 ? STONE_L : STONE), 0, 0.4, 0, g)
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; if (i % 2) k.mk(k.rb(0.22, 0.14, 0.16, 0.03), k.M(STONE), Math.cos(a) * r, 0.66, Math.sin(a) * r, g).rotation.y = -a }
+  const B = k.grp(g, 0, 0.62, 0)
+  B.rotation.x = -0.55
+  const br = 0.22 + level * 0.03
+  k.mk(k.cyl(br + 0.04, br + 0.1, 0.32, 12), k.M(0x3c3f48), 0, 0.05, 0, B)
+  k.mk(k.cyl(br, br + 0.05, 0.62, 12), k.M(0x4a4e5a), 0, 0.42, 0, B)
+  k.mk(k.cyl(br * 0.7, br * 0.7, 0.05, 12), k.MB(0x111111), 0, 0.74, 0, B)
+  const band = level >= 3 ? GOLD : METAL
+  for (const y of [0.2, 0.6]) k.mk(k.cyl(br + 0.05, br + 0.05, 0.06, 12), k.M(band), 0, y, 0, B)
+  // A small stack of shells.
+  for (const [x, z] of [[0.45, 0.35], [0.55, 0.22], [0.5, 0.3]]) k.mk(k.sph(0.09, 10, 8), k.M(0x2e2e36), x, 0.74, z, g)
+}
+
+/** Trap: a hatch of planks with spikes peeking through — only its owner ever sees it in the city. */
+function trap(k: Kit, g: THREE.Group, level: number) {
+  k.mk(k.rb(1.0, 0.06, 1.0, 0.03), k.M(0x8a6a44), 0, 0.04, 0, g)
+  for (let i = 0; i < 4; i++) k.mk(k.rb(0.22, 0.03, 0.94, 0.01), k.M(i % 2 ? WOOD : WOOD_D), -0.36 + i * 0.24, 0.08, 0, g)
+  const n = level >= 2 ? 3 : 2
+  for (let i = 0; i < n * n; i++) k.mk(k.cone(0.06, 0.2, 5), k.M(STEEL_TRAP), -0.3 + (i % n) * (0.6 / (n - 1)), 0.18, -0.3 + Math.floor(i / n) * (0.6 / (n - 1)), g)
+}
+const STEEL_TRAP = 0xc9d2de
+
+/** Stable: a long timber barn with a hay loft, a paddock fence and a horseshoe sign; stone and tiles at 2. */
+function stable(k: Kit, g: THREE.Group, level: number) {
+  const H = k.grp(g)
+  H.rotation.y = -0.25
+  const w = 1.8, d = 1.0, wh = 0.7
+  k.mk(k.rb(w + 0.2, 0.14, d + 0.2, 0.05), k.M(level >= 2 ? STONE_D : 0xa79e8a), 0, 0.08, 0, H)
+  k.mk(k.rb(w, wh, d, 0.08), k.M(level >= 2 ? STONE : WOOD), 0, 0.15 + wh / 2, 0, H)
+  for (const x of [-0.55, 0, 0.55]) {
+    k.mk(k.rb(0.4, 0.5, 0.06, 0.04), k.M(0x5a3418), x, 0.42, d / 2 + 0.02, H)
+    k.mk(k.rb(0.4, 0.04, 0.07, 0.01), k.M(WOOD_D), x, 0.42, d / 2 + 0.03, H)
+  }
+  k.mk(gable(k, d + 0.4, 0.62, w + 0.3), k.M(level >= 2 ? TILE : STRAW), 0, 0.15 + wh + 0.02, 0, H).rotation.y = Math.PI / 2
+  k.mk(k.rb(0.36, 0.3, 0.06, 0.04), k.M(STRAW_D), 0, 0.15 + wh + 0.22, d / 2 + 0.1, H)
+  // Horseshoe over the middle door.
+  k.mk(k.geo('shoe', () => new THREE.TorusGeometry(0.1, 0.025, 6, 12, Math.PI * 1.4)), k.M(GOLD), 0, 0.15 + wh - 0.06, d / 2 + 0.06, H).rotation.z = -Math.PI * 0.2
+  // Paddock fence in front.
+  const F = k.grp(g, 0, 0, 0.85)
+  for (let i = 0; i < 5; i++) k.mk(k.cyl(0.03, 0.03, 0.36, 5), k.M(WOOD_D), -0.8 + i * 0.4, 0.18, 0, F)
+  for (const y of [0.16, 0.3]) k.mk(k.rb(1.66, 0.04, 0.04, 0.01), k.M(WOOD), 0, y, 0, F)
+  k.mk(k.cyl(0.16, 0.18, 0.12, 10), k.M(WOOD), 0.65, 0.06, -0.15, F)
+  k.mk(k.cyl(0.13, 0.13, 0.03, 10), k.M(0x4db4f0), 0.65, 0.12, -0.15, F)
+}
+
+/** Crossbow tower: a square stone tower with a big crossbow on a turntable at the top; metal, then gold trim. */
+function crossbow(k: Kit, g: THREE.Group, level: number) {
+  const s = 0.82, h = 1.5 + level * 0.18
+  k.mk(k.rb(s + 0.3, 0.3, s + 0.3, 0.06), k.M(STONE_D), 0, 0.15, 0, g)
+  k.mk(k.rb(s, h, s, 0.08), k.M(STONE), 0, 0.3 + h / 2, 0, g)
+  for (let i = 0; i < 6; i++) k.mk(k.rb(0.2, 0.14, 0.05, 0.03), k.M(STONE_L), (i % 2 ? 0.2 : -0.2), 0.6 + i * 0.22, s / 2 + 0.01, g)
+  const trim = level >= 3 ? GOLD : METAL
+  k.mk(k.rb(s + 0.24, 0.14, s + 0.24, 0.04), k.M(trim), 0, 0.3 + h + 0.07, 0, g)
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) k.mk(k.rb(0.2, 0.24, 0.2, 0.04), k.M(STONE), x * (s / 2 + 0.02), 0.3 + h + 0.26, z * (s / 2 + 0.02), g)
+  // The crossbow: a stock, a wide bow, a loaded bolt.
+  const C = k.grp(g, 0, 0.3 + h + 0.3, 0)
+  C.rotation.y = 0.6
+  k.mk(k.cyl(0.18, 0.22, 0.12, 10), k.M(WOOD_D), 0, 0, 0, C)
+  k.mk(k.rb(0.14, 0.12, 0.9, 0.03), k.M(WOOD), 0, 0.14, 0.1, C)
+  k.mk(k.rb(1.0, 0.06, 0.08, 0.02), k.M(trim), 0, 0.16, 0.48, C)
+  k.mk(k.cyl(0.006, 0.006, 0.95, 4), k.MB(0xeeeeee), 0, 0.16, 0.36, C).rotation.z = Math.PI / 2
+  k.mk(k.rb(0.04, 0.04, 0.7, 0.01), k.M(WOOD_D), 0, 0.22, 0.25, C)
+  k.mk(k.cone(0.05, 0.12, 4), k.M(STEEL_TRAP), 0, 0.22, 0.65, C).rotation.x = Math.PI / 2
+  k.mk(k.rb(0.24, 0.34, 0.08, 0.05), k.M(0x2e2420), 0, 0.3 + h * 0.4, s / 2 + 0.02, g)
+}
+
+/** A grand hall for town halls 6 and 7: the citadel with golden obelisks at the corners; banners and a crown of crystals at 7. */
+function grandHall(k: Kit, g: THREE.Group, level: number, live: Live) {
+  townhall(k, g, 5, live)
+  for (const [x, z] of [[-1.25, -1.0], [1.25, -1.0], [-1.25, 1.0], [1.25, 1.0]]) {
+    k.mk(k.rb(0.26, 0.2, 0.26, 0.04), k.M(STONE_D), x, 0.1, z, g)
+    k.mk(k.cyl(0.08, 0.12, 0.9, 4), k.M(GOLD), x, 0.65, z, g).rotation.y = Math.PI / 4
+    k.mk(k.cone(0.1, 0.2, 4), k.M(GOLD), x, 1.2, z, g).rotation.y = Math.PI / 4
+  }
+  if (level >= 7) {
+    for (const x of [-1.25, 1.25]) k.flag(g, x, 1.3, 1.0, 0.6, 0.34, 0x3e8ef0, GOLD)
+    const R = k.grp(g, 0, 3.4, 0)
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const c = k.mk(k.geo('oct', () => new THREE.OctahedronGeometry(0.36, 0)), k.M(0x63f0ff, { emissive: 0x2ab8e0, emissiveIntensity: 0.7 }), Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55, R); c.scale.setScalar(0.35) }
+    const gl = k.glow(0x6af2ff, 2.6, 0.6)
+    gl.position.set(0, 3.4, 0)
+    g.add(gl)
+    live.glows ??= []
+    live.glows.push(gl)
+  }
+}
+
 /** Decor: road pavers that join their neighbours, trees, a flower bed, a lantern, a pond. Looks only. */
 function road(k: Kit, g: THREE.Group, joins: { e: boolean; s: boolean }) {
   k.mk(k.rb(1.5, 0.06, 1.5, 0.04), k.M(0xc9b48c), 0, 0.04, 0, g)
@@ -340,7 +492,7 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
   const g = new THREE.Group(), inner = k.grp(g)
   const L = Math.max(1, level)
   switch (type) {
-    case 'townhall': townhall(k, inner, Math.min(5, L), live); inner.scale.setScalar(0.78); break
+    case 'townhall': if (L >= 6) grandHall(k, inner, Math.min(7, L), live); else townhall(k, inner, L, live); inner.scale.setScalar(0.78); break
     case 'barracks': barracks(k, inner, Math.min(4, L)); inner.scale.setScalar(0.8); break
     case 'storage': storage(k, inner, Math.min(4, L)); inner.scale.setScalar(0.92); break
     case 'wall': wall(k, inner, Math.min(5, L), joins); break
@@ -349,13 +501,19 @@ export function buildingModel(k: Kit, type: BuildingType, level: number, joins: 
     case 'hut': hut(k, inner); inner.scale.setScalar(0.9); break
     case 'market': market(k, inner, Math.min(3, L), live); inner.scale.setScalar(1.05); break
     case 'well': well(k, inner, Math.min(3, L), live); break
+    case 'archery': archery(k, inner, Math.min(3, L)); inner.scale.setScalar(0.95); break
+    case 'workshop': workshop(k, inner, Math.min(3, L), live); inner.scale.setScalar(0.85); break
+    case 'mortar': mortar(k, inner, Math.min(3, L)); break
+    case 'trap': trap(k, inner, Math.min(2, L)); break
+    case 'stable': stable(k, inner, Math.min(2, L)); inner.scale.setScalar(0.85); break
+    case 'crossbow': crossbow(k, inner, Math.min(3, L)); break
     case 'road': road(k, inner, joins); break
     case 'tree': tree(k, inner, joins.s); break
     case 'flowers': flowers(k, inner); break
     case 'lantern': lantern(k, inner, live); break
     case 'pond': pond(k, inner); break
   }
-  const flat = type === 'road' || type === 'pond' || type === 'flowers'
+  const flat = type === 'road' || type === 'pond' || type === 'flowers' || type === 'trap'
   if (type !== 'wall' && !flat) k.outline(inner, 0.03)
   if (!flat) k.blob(g, 0, 0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.3 : 2.0, type === 'wall' ? 1.2 : type === 'tree' || type === 'lantern' ? 1.1 : 1.7, 0.4)
   return g

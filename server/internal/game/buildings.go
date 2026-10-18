@@ -30,6 +30,8 @@ type LevelSpec struct {
 	EnergyCap     int64 `json:"energy_cap,omitempty"` // storage, crystal well
 	FeePct        int   `json:"fee_pct,omitempty"`    // market: the share kept on every exchange
 	Builders      int   `json:"builders,omitempty"`   // builder hut
+	Splash        int   `json:"splash,omitempty"`     // mortar: damage per unit hit by a shell
+	TrapDmg       int   `json:"trap_dmg,omitempty"`   // trap: damage when it springs
 }
 
 type BuildingDef struct {
@@ -66,7 +68,7 @@ func (d BuildingDef) Allowed(thLevel int) int {
 }
 
 // BuildingOrder is the order buildings are offered in the city.
-var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "road", "tree", "flowers", "lantern", "pond"}
+var BuildingOrder = []string{"townhall", "barracks", "storage", "wall", "tower", "tavern", "hut", "market", "well", "archery", "workshop", "mortar", "trap", "stable", "crossbow", "road", "tree", "flowers", "lantern", "pond"}
 
 // Land is the square a player may build on: (start, size) on the MaxGrid island, centred.
 // 12×12 for town halls 1–2 (the original field), 14×14 for 3, the whole island from 4.
@@ -98,11 +100,13 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 1000, Seconds: 45, RequiresTH: 2, RequiresLevel: 3, HP: 1800},
 			{Level: 4, Cost: 2000, Seconds: 60, RequiresTH: 3, RequiresLevel: 5, HP: 2400},
 			{Level: 5, Cost: 3500, Seconds: 90, RequiresTH: 4, RequiresLevel: 7, HP: 3100},
+			{Level: 6, Cost: 5000, Seconds: 120, RequiresTH: 5, RequiresLevel: 9, HP: 3900},
+			{Level: 7, Cost: 7000, Seconds: 150, RequiresTH: 6, RequiresLevel: 11, HP: 4800},
 		},
 	},
 	"barracks": {
 		Type: "barracks", Name: "Казарма", Description: "Готовит войска. Уровень увеличивает численность армии.",
-		MaxCount: []int{1, 1, 2, 2, 3},
+		MaxCount: []int{1, 1, 2, 2, 3, 3, 4},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 150, Seconds: 10, RequiresTH: 1, HP: 400, Capacity: 10},
 			{Level: 2, Cost: 400, Seconds: 20, RequiresTH: 2, HP: 550, Capacity: 18},
@@ -122,7 +126,7 @@ var Buildings = map[string]BuildingDef{
 	},
 	"wall": {
 		Type: "wall", Name: "Стена", Description: "Сегмент укреплений: войска сначала пробивают стены.", Defense: true,
-		MaxCount: []int{4, 8, 12, 16, 20},
+		MaxCount: []int{4, 8, 12, 16, 20, 24, 28},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 25, Seconds: 3, RequiresTH: 1, HP: 120},
 			{Level: 2, Cost: 70, Seconds: 5, RequiresTH: 2, HP: 220},
@@ -164,6 +168,59 @@ var Buildings = map[string]BuildingDef{
 			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 560, EnergyCap: 900},
 		},
 	},
+	// Army and defence.
+	"archery": {
+		Type: "archery", Name: "Стрельбище", Description: "Здесь учат лучников: они стреляют через стены, но хрупки.",
+		MaxCount: []int{0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 250, Seconds: 15, RequiresTH: 2, HP: 380},
+			{Level: 2, Cost: 600, Seconds: 25, RequiresTH: 3, HP: 520},
+			{Level: 3, Cost: 1100, Seconds: 40, RequiresTH: 4, HP: 680},
+		},
+	},
+	"workshop": {
+		Type: "workshop", Name: "Мастерская", Description: "Улучшает войска: каждый уровень отряда даёт +10% здоровья и атаки. Уровень мастерской открывает следующий уровень войск.",
+		MaxCount: []int{0, 0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 800, Seconds: 30, RequiresTH: 3, HP: 500},
+			{Level: 2, Cost: 1500, Seconds: 45, RequiresTH: 4, HP: 650},
+			{Level: 3, Cost: 2500, Seconds: 60, RequiresTH: 5, HP: 800},
+		},
+	},
+	"mortar": {
+		Type: "mortar", Name: "Мортира", Description: "Бьёт по площади: каждый снаряд задевает до шести бойцов. Сильна против толпы.", Defense: true,
+		MaxCount: []int{0, 0, 1, 1, 2, 2, 3},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 700, Seconds: 30, RequiresTH: 3, HP: 450, Splash: 6},
+			{Level: 2, Cost: 1200, Seconds: 45, RequiresTH: 4, HP: 600, Splash: 9},
+			{Level: 3, Cost: 2000, Seconds: 60, RequiresTH: 5, HP: 780, Splash: 13},
+		},
+	},
+	"trap": {
+		Type: "trap", Name: "Ловушка", Description: "Срабатывает один раз в начале боя. Соперник не видит ловушки, пока не нападёт.", Defense: true,
+		MaxCount: []int{0, 2, 3, 4, 5, 6, 7},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 60, Seconds: 5, RequiresTH: 2, HP: 0, TrapDmg: 60},
+			{Level: 2, Cost: 200, Seconds: 10, RequiresTH: 3, HP: 0, TrapDmg: 110},
+		},
+	},
+	"stable": {
+		Type: "stable", Name: "Конюшня", Description: "Готовит всадников: они объезжают стены и первыми бьют по башням.",
+		MaxCount: []int{0, 0, 0, 1},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 900, Seconds: 35, RequiresTH: 4, HP: 600},
+			{Level: 2, Cost: 1600, Seconds: 50, RequiresTH: 5, HP: 780},
+		},
+	},
+	"crossbow": {
+		Type: "crossbow", Name: "Арбалетная башня", Description: "Дальнобойная: болты летят прежде всего в тараны и всадников.", Defense: true,
+		MaxCount: []int{0, 0, 0, 1, 1, 2, 3},
+		Levels: []LevelSpec{
+			{Level: 1, Cost: 1500, Seconds: 45, RequiresTH: 4, HP: 650, DPS: 40},
+			{Level: 2, Cost: 2400, Seconds: 60, RequiresTH: 5, HP: 850, DPS: 55},
+			{Level: 3, Cost: 3500, Seconds: 80, RequiresTH: 6, HP: 1050, DPS: 72},
+		},
+	},
 	// Decor: looks only. Built at once, no builder, no hit points, never part of a defence.
 	"road":    decor("road", "Дорога", "Мостовая между зданиями. Укладывается цепочкой.", 5, []int{40, 60, 80, 100, 120}),
 	"tree":    decor("tree", "Дерево", "Тень и зелень во дворе.", 15, []int{6, 10, 14, 18, 22}),
@@ -172,7 +229,7 @@ var Buildings = map[string]BuildingDef{
 	"pond":    decor("pond", "Пруд", "Вода с кувшинками.", 40, []int{1, 1, 2, 2, 3}),
 	"tower": {
 		Type: "tower", Name: "Башня", Description: "Стреляет по атакующим каждый раунд боя.", Defense: true,
-		MaxCount: []int{1, 2, 3, 4, 5},
+		MaxCount: []int{1, 2, 3, 4, 5, 6, 6},
 		Levels: []LevelSpec{
 			{Level: 1, Cost: 200, Seconds: 10, RequiresTH: 1, HP: 300, DPS: 14},
 			{Level: 2, Cost: 500, Seconds: 20, RequiresTH: 2, HP: 430, DPS: 22},
