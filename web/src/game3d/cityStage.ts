@@ -106,6 +106,8 @@ export class CityStage {
   get toolkit() { return this.kit }
   get size() { return this.N * CELL }
   get time() { return this.T }
+  /** The built-up part of the grid the camera frames: its centre and side. */
+  get bounds() { return { c: this.fit.c.clone(), span: this.fit.span } }
   entries() { return [...this.placed.values()].map(p => ({ id: p.item.id, type: p.item.type, holder: p.holder, model: p.model, height: p.height })) }
   /** project: a scene point to canvas pixels (for floating numbers). */
   project(v: THREE.Vector3): [number, number] { return this.toScreen(this.world.localToWorld(v.clone())) }
