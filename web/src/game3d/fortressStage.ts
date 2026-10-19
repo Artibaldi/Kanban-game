@@ -393,7 +393,8 @@ export class FortressStage {
       this.killUnit(u)
     }
     const left = B.units.filter(u => u.alive && u.unit.killed).length
-    if (!left && (!B.hasOverdue || B.bashes >= 2) && B.endAt === undefined) B.endAt = t + 0.8
+    // Even a wave with nothing defeated lets the horde march up before the result.
+    if (!left && (!B.hasOverdue || B.bashes >= 2) && B.endAt === undefined) B.endAt = Math.max(t + 0.8, 4)
     if ((B.endAt !== undefined && t >= B.endAt) || t > 24) this.finishWave()
   }
 

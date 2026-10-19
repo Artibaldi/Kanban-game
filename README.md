@@ -51,11 +51,13 @@ Gamified work tools usually end up ranking people. Task Bastion is built the oth
 
 | Board | Task card |
 |---|---|
-| <img src="docs/screenshots/board.png" alt="Kanban board with five columns"> | <img src="docs/screenshots/task.png" alt="Task card with estimate, reward and history"> |
+| <img src="docs/screenshots/board.png" alt="Kanban board with five columns"> | <img src="docs/screenshots/task.png" alt="Task card with reward, due date and agreed estimate"> |
 | **Lead review** | **Barracks** |
-| <img src="docs/screenshots/review.png" alt="Lead's review queue with a reward notification"> | <img src="docs/screenshots/army.png" alt="Troop types and the training queue"> |
+| <img src="docs/screenshots/review.png" alt="Lead's review queue: tasks to confirm and estimates to agree"> | <img src="docs/screenshots/army.png" alt="The army camp in 3D and the troop cards"> |
+| **Fortress** | **Friendly battle** |
+| <img src="docs/screenshots/fortress.png" alt="The 3D fortress: a horde made of the team's tasks marches down the priority lanes toward the walls"> | <img src="docs/screenshots/battle.png" alt="Friendly battle replay: the squad breaks the walls and towers of a colleague's city"> |
 | **City** | **Work mode, no game** |
-| <img src="docs/screenshots/city.png" alt="Player's city with a town hall, towers, walls and construction"> | <img src="docs/screenshots/work-mode.png" alt="Home page in Work mode: only tasks and events"> |
+| <img src="docs/screenshots/city.png" alt="Player's 3D city: a walled town hall, towers, storages and barracks"> | <img src="docs/screenshots/work-mode.png" alt="Home page in Work mode: only tasks and events"> |
 
 <details>
 <summary>Mobile</summary>

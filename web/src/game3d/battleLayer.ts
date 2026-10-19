@@ -33,10 +33,10 @@ export class BattleLayer {
     city.onFrame = (dt, t) => this.frame(dt, t)
   }
 
-  /** start: the squad lines up at the front edge of the island; the garrison (shown figures per type) at the town hall. */
+  /** start: the squad lines up at the front edge of the town (in view, not at the far edge of the island); the garrison (shown figures per type) at the town hall. */
   start(squad: Record<string, number>, shown: Record<string, number>, garrison: Record<string, number> = {}) {
     this.clear()
-    const k = this.city.toolkit, edge = this.city.size / 2 + 1.4
+    const k = this.city.toolkit, { c: mid, span } = this.city.bounds, edge = mid.z + span / 2
     const hall = this.city.entries().find(e => e.type === 'townhall')
     const ring = Object.entries(garrison).flatMap(([type, n]) => Array.from({ length: n }, () => type))
     ring.forEach((type, j) => {
@@ -57,8 +57,8 @@ export class BattleLayer {
         const g = troopModel(k, type)
         g.scale.setScalar(type === 'ram' ? 0.8 : 0.95)
         k.blob(g, 0, 0, type === 'ram' ? 1.4 : 0.8, type === 'ram' ? 1.6 : 0.8, 0.45)
-        const gap = Math.min(1.0, (this.city.size + 2) / Math.max(1, total))
-        const x = (i - (total - 1) / 2) * gap
+        const gap = Math.min(1.0, (span + 2) / Math.max(1, total))
+        const x = mid.x + (i - (total - 1) / 2) * gap
         g.position.set(x, 0.21, edge + (j % 2) * 0.7)
         g.rotation.y = Math.PI
         this.city.group.add(g)

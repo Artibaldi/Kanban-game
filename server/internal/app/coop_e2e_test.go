@@ -365,10 +365,12 @@ func TestAdminTeamsAndSeed(t *testing.T) {
 	if len(ws) < 3 {
 		t.Fatalf("seeded past waves: %d", len(ws))
 	}
-	var hp int
-	_ = pool.QueryRow(context.Background(), `SELECT hp FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp)
-	if hp != 85 {
-		t.Fatalf("seeded fortress: %d", hp)
+	// The seed sets 85; on a work day the clock has already taken today's overdue damage off it.
+	var hp, damage int
+	_ = pool.QueryRow(context.Background(), `SELECT f.hp, COALESCE((SELECT -SUM(e.delta) FROM fortress_events e WHERE e.team_id=f.team_id AND e.kind='overdue_damage'), 0)
+ FROM fortresses f JOIN teams t ON t.id=f.team_id WHERE t.name='Платформа'`).Scan(&hp, &damage)
+	if hp != 85-damage {
+		t.Fatalf("seeded fortress: %d, overdue damage %d", hp, damage)
 	}
 }
 
